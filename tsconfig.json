@@ -1,0 +1,29 @@
+{
+  "compileOnSave": true,
+  "compilerOptions": {
+    "target": "ESNext",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "strict": true,
+    "jsx": "preserve",
+    "sourceMap": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "lib": ["ES2015","ESNext", "DOM"],
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true, // 设置倒入规则
+    "baseUrl": "./",
+    "allowJs": true,
+    "outDir": "dist",
+    // "types": ["./types"],
+    "paths": {
+      "@/*": ["./src/*"],
+      // "~/*": ["./src/pages/*"]
+    }
+  },
+  "exclude": ["node_modules"],
+  "include": ["**/*.ts", "**/*.d.ts", "**/*.tsx"],
+  // "references": [{ "path": "./tsconfig.node.json" }]
+}

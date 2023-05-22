@@ -1,0 +1,6 @@
+# Logs
+
+node_modules
+dist
+*.local
+*.yaml

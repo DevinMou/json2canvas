@@ -283,8 +283,8 @@ const windowInfo: Record<string, unknown> & {
     [k: string]: number
   }
   createCanvas?: {
-    <T extends boolean>(isOffScreen: false): SampleCanvas.Canvas<T>
-    <T extends boolean>(isOffScreen: true, width?: number, height?: number): SampleCanvas.Canvas<T>
+    <T extends boolean = true>(isOffScreen: false): SampleCanvas.Canvas<T>
+    <T extends boolean = false>(isOffScreen: true, width?: number, height?: number): SampleCanvas.Canvas<T>
   }
   createImage?: (canvas?: SampleCanvas.Canvas) => SampleImage
 } = {

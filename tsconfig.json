@@ -11,19 +11,32 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "esModuleInterop": true,
-    "lib": ["ES2015","ESNext", "DOM"],
+    "lib": [
+      "ES2015",
+      "ESNext",
+      "DOM"
+    ],
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true, // 设置倒入规则
-    "baseUrl": "./",
+    "baseUrl": ".",
     "allowJs": true,
     "outDir": "dist",
     // "types": ["./types"],
     "paths": {
-      "@/*": ["./src/*"],
+      "@/*": [
+        "src/*"
+      ],
       // "~/*": ["./src/pages/*"]
     }
   },
-  "exclude": ["node_modules"],
-  "include": ["**/*.ts", "**/*.d.ts", "**/*.tsx"],
+  "exclude": [
+    "node_modules"
+  ],
+  "include": [
+    "**/*.ts",
+    "**/*.d.ts",
+    "**/*.tsx",
+    "demo_serve.ts"
+  ],
   // "references": [{ "path": "./tsconfig.node.json" }]
 }

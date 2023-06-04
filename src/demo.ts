@@ -1,115 +1,118 @@
 import { draw, initWindow, DrawLayout, SampleCanvasType, SampleImageType } from './json2canvas'
-  const layout: DrawLayout = {
-    type: 'view',
-    styles: {
-      display: 'inline-block',
-      background: 'pink',
-      // 'flex-direction': 'column',
-      'flex-wrap': 'wrap',
-      'font-size': 0,
-      'justify-content': 'flex-end'
-      // height: '250px'
-    },
-    children: [
-      {
-        type: 'view',
-        styles: {
-          width: '55%',
-          height: '100px',
-          background: 'red',
-          flex: '1 2 auto',
-          'box-sizing': 'content-box',
-          display: 'inline-block'
-        }
-      },
-      {
-        type: 'view',
-        styles: {
-          width: 'auto',
-          height: '100px',
-          background: 'yellow',
-          flex: '1 1 auto',
-          overflow: 'hidden',
-          display: 'inline-flex',
-          'box-sizing': 'content-box',
-          'transform-origin': 'right top',
-          transform: 'scale(1.5, 1.5) skew(20deg) rotate(30deg) translate(30px, 50px)'
-        },
-        children: [
-          {
-            type: 'view',
-            styles: {
-              width: '60px',
-              height: '50px',
-              background: 'purple',
-              // margin: '20px 0',
-              'align-self': 'flex-start',
-              display: 'inline-block'
-            }
-          },
-          {
-            type: 'view',
-            styles: {
-              width: '90px',
-              height: '50px',
-              background: 'aqua',
-              display: 'inline-block'
-            }
-          }
-        ]
-      },
-      {
-        type: 'view',
-        styles: {
-          width: '100px',
-          height: 'auto',
-          background: 'green',
-          flex: '0 1 auto',
-          'box-sizing': 'content-box',
-          display: 'inline-block',
-          margin: '0 0 30px 0'
-        }
-      },
-      {
-        type: 'view',
-        styles: {
-          width: '100px',
-          height: '100px',
-          background: 'blue',
-          flex: '0 2 auto',
-          padding: '0 20px',
-          'box-sizing': 'border-box',
-          display: 'inline-block',
-          'align-self': 'center'
-        }
-      },
-      {
-        type: 'view',
-        styles: {
-          width: '100px',
-          height: '100px',
-          background: 'plum',
-          flex: '0 1 auto',
-          'box-sizing': 'content-box',
-          margin: '20px 0',
-          display: 'block',
-          'align-self': 'center'
-        }
-      },
-      {
-        type: 'view',
-        styles: {
-          width: '100px',
-          height: '100px',
-          background: 'orange',
-          flex: '0 1 auto',
-          'box-sizing': 'content-box',
-          margin: '10px 0 0',
-          display: 'inline-block',
-          'align-self': 'center'
-        }
+import { parseBackgroundShorthand } from './json2canvas/lib/background'
+const layout: DrawLayout = {
+  type: 'view',
+  styles: {
+    display: 'inline-flex',
+    background: 'pink',
+    // 'flex-direction': 'column',
+    'flex-wrap': 'nowrap',
+    'font-size': 0,
+    'justify-content': 'flex-end'
+    // height: '250px'
+  },
+  children: [
+    {
+      type: 'view',
+      styles: {
+        width: '55%',
+        height: '100px',
+        background:
+          'url(https://image.brightfuture360.com/static/temple/merit-box/btn-1.png) no-repeat center top calc(-15% + 10px)/cover,linear-gradient(135deg, red, orange 10%, yellow, green, blue 31%,40%,purple 50%,black calc(100% - 20px), #fff) repeat bottom 10px right/calc(100% - min(1%, 5px)) calc(50% - 10px) content-box border-box,#ff0000',
+        flex: '1 2 auto',
+        'box-sizing': 'content-box',
+        display: 'inline-block',
+        padding: '20px'
       }
-    ]
+    },
+    {
+      type: 'view',
+      styles: {
+        width: 'auto',
+        height: '100px',
+        background: 'yellow',
+        flex: '1 1 auto',
+        overflow: 'hidden',
+        display: 'inline-flex',
+        'box-sizing': 'content-box',
+        'transform-origin': 'right top',
+        transform: 'scale(.8, .8) skew(20deg) rotate(30deg) translate(10px, 50px)'
+      },
+      children: [
+        {
+          type: 'view',
+          styles: {
+            width: '60px',
+            height: '50px',
+            background: 'purple',
+            // margin: '20px 0',
+            'align-self': 'flex-start',
+            display: 'inline-block'
+          }
+        },
+        {
+          type: 'view',
+          styles: {
+            width: '90px',
+            height: '50px',
+            background: 'aqua',
+            display: 'inline-block'
+          }
+        }
+      ]
+    },
+    {
+      type: 'view',
+      styles: {
+        width: '100px',
+        height: 'auto',
+        background: 'green',
+        flex: '0 1 auto',
+        'box-sizing': 'content-box',
+        display: 'inline-block',
+        margin: '0 0 30px 0'
+      }
+    },
+    {
+      type: 'view',
+      styles: {
+        width: '100px',
+        height: '100px',
+        background: 'blue',
+        flex: '0 2 auto',
+        padding: '0 20px',
+        // 'box-sizing': 'border-box',
+        display: 'inline-block',
+        'align-self': 'center'
+      }
+    },
+    {
+      type: 'view',
+      styles: {
+        width: '100px',
+        height: '100px',
+        background: 'plum',
+        flex: '0 1 auto',
+        'box-sizing': 'content-box',
+        margin: '20px 0',
+        display: 'block',
+        'align-self': 'center'
+      }
+    },
+    {
+      type: 'view',
+      styles: {
+        width: '100px',
+        height: '100px',
+        background: 'orange',
+        flex: '0 1 auto',
+        'box-sizing': 'content-box',
+        margin: '10px 0 0',
+        display: 'inline-block',
+        'align-self': 'center'
+      }
+    }
+  ]
 }
 window.onload = () => {
   const h = (l: DrawLayout): string => {
@@ -124,9 +127,16 @@ window.onload = () => {
   demoDom!.innerHTML = h(layout)
   initWindow({
     dpr: window.devicePixelRatio,
-    createCanvas: (isOffScreen: boolean, width?, height?) => {
+    // dpr: 1,
+    createCanvas(isOffScreen: boolean, width?, height?) {
       if (isOffScreen && OffscreenCanvas) {
-        return new OffscreenCanvas(width as number, height as number) as SampleCanvasType<false>
+        const dpr = this.dpr || 1
+        const offCanvas = new OffscreenCanvas(
+          (width as number) * dpr,
+          (height as number) * dpr
+        ) as SampleCanvasType<false>
+        offCanvas.getContext('2d').scale(dpr, dpr)
+        return offCanvas
       } else {
         return document.createElement('canvas') as unknown as SampleCanvasType<true>
       }

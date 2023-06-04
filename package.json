@@ -4,9 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsc && node demo_serve.mjs",
+    "dev": "node watch.cjs & node dist/demo_serve.js",
+    "tsc": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "type": "module",
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -16,6 +18,7 @@
   },
   "devDependencies": {
     "@types/koa": "^2.13.6",
-    "@types/node": "^20.2.3"
+    "@types/node": "^20.2.3",
+    "@typescript-eslint/parser": "^5.59.7"
   }
 }

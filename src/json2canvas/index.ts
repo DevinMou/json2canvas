@@ -1,6 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 
+import { parseBackgroundShorthand } from './lib/background'
+import { drawItem } from './lib/draw'
+import { parseFlex, setFlexSizeLength, FlexItemProp } from './lib/flex'
+import { getBorderArr, getMarginOrPadding, getRealValue, precentStrReg } from './util/common'
+import { ReactCompute } from './util/react_compute'
+import { PickRequried, PickKeyByValueType, NOS } from './util/type'
+
 /*
 reactive,compute
 */
@@ -12,272 +19,10 @@ declare global {
     includes(searchElement: T | any, fromIndex?: number): boolean
   }
 }
-type PrependTuple<A, T extends Array<any>> = ((a: A, ...b: T) => void) extends (...a: infer I) => void ? I : []
 
-type SpecifiedLengthTuple<T, N extends number, L extends Array<any> = []> = {
-  true: L
-  false: SpecifiedLengthTuple<T, N, PrependTuple<T, L>>
-}[L['length'] extends N ? 'true' : 'false']
-type UndefinedValueKeysType<O extends object> = PickKeyByValueType<O, undefined>
-type KK<V, O extends object> = V extends Partial<Record<keyof O, any>> ? keyof V : never
-type MergeDefaultType<
-  T = never,
-  O extends object = object,
-  V extends keyof O | undefined | Partial<Record<keyof O, any>> = undefined,
-  KS extends keyof O | undefined = undefined
-> = {
-  [k in keyof O]: k extends KK<V, O>
-    ? V extends Partial<Record<keyof O, any>>
-      ? O[k] extends undefined
-        ? V[k] | O[k]
-        : V[k]
-      : T extends never
-      ? O[k]
-      : T | O[k]
-    : k extends UndefinedValueKeysType<O>
-    ? k extends KS
-      ? MergeDefaultType<T, O, V, KS>
-      : T extends never
-      ? O[k]
-      : T | O[k]
-    : O[k]
-}
-interface ReactComputeType {
-  _computer_proxy: null | {
-    _current?: any
-    _resolve: null | ((value: void | PromiseLike<void>) => void)
-    _compute: (value?: any, oldValue?: any) => void
-    trigger: (value: any, oldValue?: any) => void
-  }
-  reactive: <O extends Record<string, any> = object>(
-    obj: O
-  ) => {
-    value: <
-      T = never,
-      V extends keyof O | undefined | Partial<Record<keyof O, any>> = undefined,
-      KS extends keyof O | undefined = undefined
-    >() => MergeDefaultType<T, O, V, KS>
-  }
-  compute: <T extends object | InstanceType<ProxyConstructor>, K extends keyof T>(
-    obj: T,
-    prop: K,
-    valFn: () => any
-  ) => object
-  /* watch: <T extends object | InstanceType<ProxyConstructor>, K extends keyof T>(
-    obj: T,
-    prop: K,
-    watchFn: (value: T[K], oldValue?: T[K]) => any,
-    watchOption?: { immediate: boolean; deep: boolean }
-  ) => void */
-  watch: (
-    fn: () => any,
-    callBack: (val: any, oldValue?: any) => void,
-    watchOption?: { immediate?: boolean; deep?: boolean }
-  ) => void
-}
-
-const ReactCompute: ReactComputeType = {
-  _computer_proxy: null,
-  reactive(obj) {
-    return {
-      value() {
-        const _this = ReactCompute
-        if (obj._IS_REACT_COMPUTE) {
-          return Object.assign(obj)
-        }
-        Object.defineProperty(obj, '_IS_REACT_COMPUTE', {
-          value: true
-        })
-        return new Proxy(obj, {
-          get(target, prop) {
-            if (typeof prop === 'string' && _this._computer_proxy) {
-              const listenerProp = `_listener_${prop}`
-              if (!target[listenerProp]) {
-                Object.defineProperty(target, listenerProp, {
-                  value: []
-                })
-              }
-              target[listenerProp].push(_this._computer_proxy)
-            }
-            return target[prop as string]
-          },
-          set(target, prop, value) {
-            const oldValue = target[prop as string]
-            target[prop as keyof typeof target] = value
-            const listenerProp = `_listener_${prop.toString()}`
-            if (target[listenerProp]) {
-              target[listenerProp].forEach((item: NonNullable<ReactComputeType['_computer_proxy']>) => {
-                item.trigger(value, oldValue)
-              })
-            }
-            return true
-          }
-        })
-      }
-    }
-  },
-  compute(obj, prop, valFn) {
-    const _this = ReactCompute
-    obj = _this.reactive(obj) as typeof obj
-    const computer: NonNullable<ReactComputeType['_computer_proxy']> = {
-      _current: undefined,
-      _resolve: null as null | ((value: void | PromiseLike<void>) => void),
-      _compute() {
-        const current = valFn()
-        if (current !== this._current) {
-          this._current = current
-          obj[prop] = current
-        }
-      },
-      trigger(value, oldValue) {
-        if (value === oldValue) {
-          return
-        }
-        if (!this._resolve) {
-          new Promise<void>(resolve => {
-            this._resolve = resolve
-          }).then(() => {
-            this._resolve = null
-            this._compute(value, oldValue)
-          })
-        }
-        this._resolve!()
-      }
-    }
-    _this._computer_proxy = computer
-    computer._compute()
-    _this._computer_proxy = null
-    return obj
-  },
-  /* watch(obj, prop, valFn, watchOption = { immediate: false, deep: false }) {
-    const _this = ReactCompute
-    obj = _this.reactive(obj)
-    const computer: NonNullable<ReactComputeType['_computer_proxy']> = {
-      _current: undefined,
-      _resolve: null as null | ((value: void | PromiseLike<void>) => void),
-      _compute(value, oldValue) {
-        if (value !== oldValue) {
-          valFn(value, oldValue)
-        }
-      },
-      trigger(value, oldValue) {
-        if (!this._resolve) {
-          new Promise<void>(resolve => {
-            this._resolve = resolve
-          }).then(() => {
-            this._resolve = null
-            this._compute(value, oldValue)
-          })
-        }
-        this._resolve!()
-      }
-    }
-    _this._computer_proxy = computer
-    const currentValue = obj[prop as keyof typeof obj]
-    if (watchOption.immediate) {
-      computer._compute(currentValue, undefined)
-    }
-    _this._computer_proxy = null
-    return obj
-  }, */
-  watch(watchFn, callBackFn, watchOption) {
-    watchOption = Object.assign({ immediate: false, deep: false }, watchOption)
-    const _this = ReactCompute
-    const computer: NonNullable<ReactComputeType['_computer_proxy']> = {
-      _current: undefined,
-      _resolve: null as null | ((value: void | PromiseLike<void>) => void),
-      _compute: watchFn,
-      trigger() {
-        if (!this._resolve) {
-          new Promise<void>(resolve => {
-            this._resolve = resolve
-          }).then(() => {
-            this._resolve = null
-            const current = this._compute()
-            if (current !== this._current) {
-              callBackFn(current, this._current)
-              this._current = current
-            }
-          })
-        }
-        this._resolve!()
-      }
-    }
-    _this._computer_proxy = computer
-    const currentValue = computer._compute()
-    if (watchOption.immediate) {
-      callBackFn(currentValue, undefined)
-    }
-    _this._computer_proxy = null
-    return
-  }
-}
-
-// matrix tool
-type Matrix = number[][]
-type Vector = number[]
-function getMRC(A: (number | number[])[]) {
-  // get matrix number of row and column
-  if (Array.isArray(A)) {
-    const row = A.length
-    const isVector = !Array.isArray(A[0])
-    const col = isVector ? 1 : (A[0] as number[]).length
-    const err = A.find(e => +!isVector ^ +Array.isArray(e) || (!isVector && Array.isArray(e) && e.length !== col))
-    if (err) {
-      return [null, null]
-    } else {
-      if (isVector) {
-        A.forEach((e, i) => (A[i] = [e as number]))
-      }
-      return [row, col]
-    }
-  } else {
-    return [null, null]
-  }
-}
-function dot(A: Vector, B: Vector) {
-  return A.reduce((a, b, c) => ((a += b * B[c]), a), 0)
-}
-function transpose(A: Matrix) {
-  const [ra, ca] = getMRC(A)
-  if (ra !== null) {
-    return Array(ca)
-      .fill(1)
-      .map((e, i) => A.map(t => t[i]))
-  } else {
-    return null
-  }
-}
-
-function MT(A: Matrix, B: Matrix) {
-  // matrix time
-  const [ra, ca] = getMRC(A)
-  const [rb] = getMRC(B)
-  if (ra !== null && rb !== null) {
-    if (ca === rb) {
-      const BT = transpose(B)
-      if (BT) {
-        return Array(ra)
-          .fill(1)
-          .map((e, i) => BT.map(b => dot(b, A[i])))
-      } else {
-        return null
-      }
-    }
-  }
-  return null
-}
-//
-
-const precentStrReg = /^([\d.]+)%$/
-type IsSameType<T, K> = [T] extends [K] ? ([K] extends [T] ? true : false) : false
-export type PickKeyByValueType<T extends Record<string, any>, K> = {
-  [k in keyof T]: IsSameType<T[k], K> extends true ? k : never
-}[keyof T]
-type NOS = number | string
 export type SampleCanvasType<T extends boolean = false> = SampleCanvas.Canvas<T>
 export type SampleImageType = SampleImage
-const windowInfo: Record<string, unknown> & {
+export const windowInfo: Record<string, unknown> & {
   dpr: number
   unit: {
     [k: string]: number
@@ -299,7 +44,7 @@ export const initWindow = (_windowInfo: Partial<typeof windowInfo>) => {
     windowInfo[k] = _windowInfo[k]
   }
 }
-interface DrawStyles {
+export interface DrawStyles {
   width: NOS
   height: NOS
   top: NOS
@@ -356,38 +101,7 @@ export interface DrawLayout {
   textLines?: string[]
   rect?: LayoutRect
 }
-const styleStringReg = /^([\d.]+)([a-zA-Z]+)?$/
-const getRealValue = <T extends NOS = NOS>(val: NOS): T => {
-  const reg = styleStringReg
-  let res = val
-  if (typeof val === 'number') {
-    !0
-  } else if (typeof val === 'string') {
-    const match = reg.exec(val)
-    if (match) {
-      let value = 0
-      const num = +match[1]
-      const unit = match[2]
-      switch (unit) {
-        case 'rpx':
-          value = num * windowInfo.unit!.rpx
-          break
-        case undefined:
-        case 'px':
-          value = num * 1
-          break
-        case 'deg':
-          value = num * 1
-          break
-      }
-      res = value
-    }
-  } else {
-    res = 0
-  }
-  return res as T
-}
-type PickRequried<T, K extends keyof T> = T & Required<Pick<T, K>>
+
 const computedText: {
   canvas?: SampleCanvas.Canvas
   context?: SampleCanvas.RenderContext
@@ -402,7 +116,7 @@ const getTextLines = (
     computedText.canvas = windowInfo.createCanvas!(true)
     computedText.context = computedText.canvas!.getContext('2d')
   }
-  computedText.context!.font = `${styles['font-weight'] | 500} ${styles['font-size']}px sans-serif`
+  computedText.context!.font = `${styles['font-weight'] || 'normal'} ${styles['font-size']}px sans-serif`
   if (styles.width === undefined) {
     const width = computedText.context!.measureText(content).width
     return {
@@ -548,88 +262,7 @@ const coverStyles2RealValue = (styles: DrawLayout['styles']) => {
   }
   return res as Partial<DrawStyles & Record<Exclude<NosKeys, 'width' | 'height'>, number> & { width: NOS; height: NOS }>
 }
-const getMarginOrPadding = (str?: NOS): number[] => {
-  let matchNum: number[] = [0, 0, 0, 0]
-  if (typeof str === 'string') {
-    const reg = /\b(?:([\d.]+)([a-zA-Z]+)?)|auto\b/g
-    const matches = str.match(reg)
-    if (matches) {
-      const len = matches.length
-      matchNum = matches.map(e => (e === 'auto' ? 0 : getRealValue(e)))
-      if (len === 3) {
-        matchNum = [matchNum[0], matchNum[1], matchNum[2], matchNum[1]]
-      } else if (len === 2) {
-        matchNum = [matchNum[0], matchNum[1], matchNum[0], matchNum[1]]
-      } else if (len === 1) {
-        matchNum = Array(4).fill(matchNum[0])
-      }
-    }
-    return matchNum
-  } else if (str === undefined) {
-    return matchNum
-  } else {
-    return Array(4).fill(str)
-  }
-}
-const getBorderArr = (style: Partial<DrawStyles>) => {
-  let borderArr: (ReturnType<typeof getBorderOption> | null)[] = [null, null, null, null]
-  const r = /^border(?:-(top|left|bottom|right))?$/
-  const karr = ['top', 'left', 'bottom', 'right']
-  for (const k in style) {
-    if (r.test(k)) {
-      const v = style[k as keyof DrawStyles] as NOS
-      const m = r.exec(k)![1]
-      if (m) {
-        borderArr[karr.indexOf(m)] = getBorderOption(v)
-      } else {
-        const item = getBorderOption(v)
-        borderArr = borderArr.map(() => (item ? [...item] : item))
-      }
-    }
-  }
-  return borderArr
-}
-const getBorderOption = (str: NOS) => {
-  const reg = /^([\d.]+(?:[a-zA-Z]+)?)\s+(solid)\s+(\S[\s\S]+)$/
-  if (typeof str === 'string') {
-    str = getRealValue(str)
-    if (typeof str === 'string' && reg.test(str)) {
-      const match = reg.exec(str)
-      return [getRealValue(match![1]), match![2], match![3]] as [number, string, string]
-    } else {
-      return null
-    }
-  } else {
-    return null
-  }
-}
-const val2XY = (valArr: NOS[], parentValWidth: number, parentValHeight: number) => {
-  const res = {
-    x: 0,
-    y: 0
-  }
-  valArr.forEach((item, index) => {
-    if (typeof item === 'number') {
-      if (index === 0) {
-        res.x = item
-        res.y = item
-      }
-      if (index === 1) {
-        res.y = item
-      }
-    } else if (precentStrReg.test(item || '')) {
-      const pv = +precentStrReg.exec(item)![1]
-      if (index === 0) {
-        res.x = (parentValWidth * pv) / 100
-        res.y = (parentValHeight * pv) / 100
-      }
-      if (index === 1) {
-        res.y = (parentValHeight * pv) / 100
-      }
-    }
-  })
-  return res
-}
+
 const parseOrigin = (val?: NOS) => {
   const res = {
     xPrecent: true,
@@ -707,61 +340,7 @@ type RectAndStyleType = {
   rect: ReturnType<typeof initRectAndStyle>['rect']
   style: ReturnType<typeof coverStyles2RealValue>
 }
-const parseLengthStr = (str: NOS, unit = 'px') => {
-  const reg = /^((?:[+-])?(?:\d\.)+)(\w+)$/
-  if (typeof str === 'string') {
-    const m = reg.exec(str)
-    if (m !== null) {
-      return {
-        value: +m[1],
-        unit: m[2]
-      }
-    } else {
-      return {
-        value: 0,
-        unit: ''
-      }
-    }
-  } else {
-    return {
-      value: str,
-      unit
-    }
-  }
-}
-const parseFlex = (flexStr: string) => {
-  let grow = 0
-  let shrink = 1
-  let basis = 'auto'
-  if (flexStr) {
-    let m = /^[\d.]+$/.exec(flexStr)
-    if (m !== null) {
-      grow = +flexStr
-    } else if (((m = /^[\d.]+[a-zA-Z%]+$/.exec(flexStr)), m !== null)) {
-      basis = getRealValue(flexStr)
-    } else if (((m = /^([\d.]+)\s+([a-zA-Z0-9.%]+)$/.exec(flexStr)), m !== null)) {
-      grow = +m[1]
-      m = /^([\d.]+)?([a-zA-Z%]+)?$/.exec(m[2])
-      if (m !== null) {
-        if (m[2]) {
-          basis = getRealValue(m[0])
-        } else if (m[1] && !m[2]) {
-          shrink = +m[1]
-        }
-      }
-    } else if (((m = /^([\d.]+)\s+([a-zA-Z0-9.%]+)\s+([a-zA-Z0-9.%]+)$/.exec(flexStr)), m !== null)) {
-      grow = +m[1]
-      shrink = +m[2]
-      m = /^([\d.]+)?([a-zA-Z%]+)?$/.exec(m[3])
-      if (m !== null) {
-        if (m[2]) {
-          basis = getRealValue(m[0])
-        }
-      }
-    }
-  }
-  return { grow, shrink, basis }
-}
+
 const setWidthOrHeightByStyle = (
   rect: ReturnType<typeof initRectAndStyle>['rect'],
   length: number,
@@ -968,200 +547,6 @@ const initRectAndStyle = (layout: DrawLayout, parentRAT?: RectAndStyleType) => {
     style
   }
 }
-interface FlexItemBaseProp {
-  sizeLength: number
-  styleLength: number
-  contentLength: number
-  borderBox: boolean
-  overflow: boolean
-  padding: number
-  margin: number
-  flexGrow: number
-  flexShrink: number
-  precentLength: number
-  originPrecentLength: number
-  fixedLength: number
-  layout: ComputedLayout
-}
-type FlexItemProp = PickRequried<Partial<FlexItemBaseProp>, 'flexGrow' | 'flexShrink' | 'layout'>
-export const setFlexSizeLength = (
-  arr: FlexItemProp[],
-  flexBoxInitLength?: number,
-  isColumn?: boolean,
-  isWrap?: boolean
-) => {
-  let flexLength = 0
-  const precentArr: PickRequried<FlexItemProp, 'precentLength'>[] = []
-  const fixedArr: PickRequried<FlexItemProp, 'fixedLength'>[] = []
-  const flexArr: PickRequried<FlexItemProp, 'styleLength' | 'contentLength'>[] = []
-  let paddingContentSum = 0
-  let paddingBorderSum = 0
-  let marginSum = 0
-  arr.forEach(e => {
-    // e = { ...e }
-    if (e.padding) {
-      if (e.borderBox) {
-        paddingBorderSum += e.padding
-      } else {
-        paddingContentSum += e.padding
-      }
-    }
-    if (e.margin) {
-      marginSum += e.margin
-    }
-    if (e.precentLength !== undefined) {
-      precentArr.push(e as typeof precentArr[0])
-      if (isColumn && flexBoxInitLength === undefined) {
-        e.originPrecentLength = e.precentLength
-        e.precentLength = 0
-      }
-    } else if (e.styleLength === undefined && e.contentLength) {
-      if (e.overflow) {
-        flexArr.push(e as typeof flexArr[0])
-      } else {
-        e.fixedLength = e.contentLength
-        fixedArr.push(e as typeof fixedArr[0])
-      }
-      flexLength += e.contentLength
-    } else if (e.styleLength !== undefined) {
-      flexArr.push(e as typeof flexArr[0])
-      flexLength += e.styleLength
-    }
-  })
-  flexLength += paddingContentSum + marginSum
-  let restRoomLength = 0
-  let shrinkLength = 0
-  const computeRestRoomLength = () => {
-    flexBoxLength = flexBoxInitLength || flexLength
-    restRoomLength =
-      precentArr.map(e => e.precentLength * flexBoxLength).reduce((a, b) => a + b, 0) +
-      fixedArr.map(e => e.fixedLength).reduce((a, b) => a + b, 0) +
-      flexArr.map(e => e.styleLength || e.contentLength).reduce((a, b) => a + b, 0) +
-      paddingContentSum +
-      marginSum -
-      flexBoxLength
-    if (restRoomLength > 0) {
-      shrinkLength = [
-        ...precentArr.map(
-          e => (e.precentLength * flexBoxLength - (e.borderBox && e.padding ? e.padding : 0)) * e.flexShrink
-        ),
-        ...flexArr.map(
-          e => ((e.styleLength || e.contentLength) - (e.borderBox && e.padding ? e.padding : 0)) * e.flexShrink
-        )
-      ].reduce((a, b) => a + b, 0)
-    }
-  }
-  let flexBoxLength = flexBoxInitLength || flexLength
-  computeRestRoomLength()
-  if (restRoomLength <= 0) {
-    // grow
-    const growSum = arr.map(e => e.flexGrow).reduce((a, b) => a + b, 0)
-    ;[
-      ...precentArr.map(e => {
-        e.sizeLength = e.precentLength * flexBoxLength
-        return e
-      }),
-      ...flexArr.map(e => {
-        e.sizeLength = e.styleLength || e.contentLength
-        return e
-      }),
-      ...fixedArr.map(e => {
-        e.sizeLength = e.fixedLength
-        return e
-      })
-    ].forEach(e => {
-      e.sizeLength =
-        e.sizeLength! + (e.borderBox ? 0 : e.padding || 0) - (growSum ? (restRoomLength * e.flexGrow) / growSum : 0)
-    })
-  } else {
-    if (isWrap) {
-      const groups: FlexItemProp[][] = [[]]
-      let tempLength = 0
-      arr.forEach(item => {
-        const flexItemLength =
-          (item.precentLength !== undefined
-            ? item.precentLength * flexBoxLength
-            : item.styleLength || item.contentLength!) +
-          (item.borderBox ? 0 : item.padding || 0) +
-          (item.margin || 0)
-        if (flexItemLength + tempLength > flexBoxLength) {
-          tempLength = 0
-          groups.push([])
-        }
-        tempLength += flexItemLength
-        groups[groups.length - 1].push(item)
-        item.layout.rect.crossIndex = groups.length - 1
-      })
-      groups.forEach(group => setFlexSizeLength(group, flexBoxLength, isColumn))
-    } else {
-      const _flexArr: typeof flexArr = []
-      let flexChanged = true
-      let needComputeRestRoom = false
-      while (flexChanged) {
-        if (needComputeRestRoom) {
-          computeRestRoomLength()
-        } else {
-          needComputeRestRoom = true
-        }
-        flexArr.forEach(e => {
-          const item = e.styleLength || e.contentLength || 0
-          const padding = e.borderBox ? e.padding || 0 : 0
-          const maxItem = Math.max(item, padding)
-          e.sizeLength = item - (((maxItem - padding) * e.flexShrink) / shrinkLength) * restRoomLength
-          if (e.borderBox && e.padding && e.sizeLength < e.padding) {
-            e.fixedLength = e.padding
-            fixedArr.push(e as typeof fixedArr[0])
-          } else if (!e.overflow && e.contentLength && e.contentLength > e.sizeLength) {
-            e.fixedLength =
-              e.styleLength !== undefined && e.styleLength < e.contentLength ? e.styleLength : e.contentLength
-            fixedArr.push(e as typeof fixedArr[0])
-          } else {
-            _flexArr.push(e)
-          }
-        })
-        if (flexArr.length !== _flexArr.length) {
-          flexArr.splice(0, flexArr.length, ..._flexArr)
-          _flexArr.length = 0
-          continue
-        }
-        const precentArrLength = precentArr.length
-        precentArr.splice(
-          0,
-          precentArr.length,
-          ...precentArr.filter(e => {
-            const item = e.precentLength! * flexBoxLength
-            const padding = e.borderBox ? e.padding || 0 : 0
-            const maxItem = Math.max(item, padding)
-            e.sizeLength = item - (((maxItem - padding) * e.flexShrink) / shrinkLength) * restRoomLength
-            if (e.borderBox && e.padding && e.sizeLength < e.padding) {
-              e.fixedLength = e.padding
-              fixedArr.push(e as typeof fixedArr[0])
-              return false
-            } else {
-              return true
-            }
-          })
-        )
-        if (precentArrLength !== precentArr.length) {
-          continue
-        }
-        fixedArr.forEach(e => {
-          e.sizeLength = e.fixedLength
-        })
-        flexChanged = false
-      }
-    }
-  }
-  return {
-    flexBoxLength,
-    children: arr.map(e => {
-      if (!e.borderBox && e.padding) {
-        e.sizeLength! += e.padding
-      }
-      return e
-    })
-  }
-}
 
 export const getFlexLayout = (...args: Parameters<typeof setFlexSizeLength>) => {
   const { flexBoxLength, children } = setFlexSizeLength(...args)
@@ -1264,7 +649,7 @@ const computeFlexRect = async (layout: ComputedLayout) => {
           if (layout.rect[contentDir] === undefined) {
             ReactCompute.watch(
               () => layout.rect[contentDir],
-              contentLength => resolve(contentLength)
+              contentLength => contentLength !== undefined && resolve(contentLength)
             )
           } else {
             resolve(layout.rect[contentDir]!)
@@ -1314,8 +699,8 @@ const mergeRect = (layout: ComputedLayout) => {
   }
 }
 
-type LayoutRect = ReturnType<typeof initRectAndStyle>['rect']
-interface ComputedLayout extends PickRequried<DrawLayout, 'rect'> {
+export type LayoutRect = ReturnType<typeof initRectAndStyle>['rect']
+export interface ComputedLayout extends PickRequried<DrawLayout, 'rect'> {
   styles: ReturnType<typeof initRectAndStyle>['style']
   children?: ComputedLayout[]
 }
@@ -1432,6 +817,9 @@ const mergeSize = (layout: ComputedLayout, isHeight = false) => {
             ReactCompute.watch(
               () => layout.rect.contentHeight,
               contentHeight => {
+                if (contentHeight === undefined) {
+                  return
+                }
                 const rest = item.rect.crossLength! - item.rect.margin[0] - item.rect.boxHeight! - item.rect.margin[2]
                 layout.rect.flexBaseOutHeight =
                   contentHeight -
@@ -1469,7 +857,7 @@ const mergeSize = (layout: ComputedLayout, isHeight = false) => {
         getRectsPropPromise([layout.rect, ...relationChildren.map(e => e.rect)], _rect => _rect.contentWidth).then(
           contentWidthArr => {
             const parentWidth = contentWidthArr[0]
-            const childrenWidths = contentWidthArr.slice(1)
+            const childrenWidths = relationChildren.map(e => e.rect.boxWidth! + e.rect.marginWidth)
             const levels: {
               isLine: boolean
               children: ComputedLayout[]
@@ -1579,7 +967,7 @@ const mergeSize = (layout: ComputedLayout, isHeight = false) => {
           let lastIsInline = false
           relationChildren.forEach(item => {
             const widthBySelf = item.rect.precentValues.width === undefined
-            if (!widthBySelf || !item.rect.isInline || !lastIsInline) {
+            if (!item.rect.isInline || !lastIsInline) {
               levels.push({
                 isInline: item.rect.isInline,
                 widthBySelf,
@@ -1587,8 +975,8 @@ const mergeSize = (layout: ComputedLayout, isHeight = false) => {
               })
             }
             levels[levels.length - 1].children.push(item)
-            item.rect.crossIndex = levels.length - 1
-            lastIsInline = widthBySelf ? item.rect.isInline : false
+            // item.rect.crossIndex = levels.length - 1
+            lastIsInline = item.rect.isInline
           })
           Promise.all(
             levels.map(level =>
@@ -1632,11 +1020,24 @@ const mergeSize = (layout: ComputedLayout, isHeight = false) => {
           })
           const maxWidth = Math.max(
             ...levels
-              .filter(item => item.widthBySelf)
+              // .filter(item => item.widthBySelf)
               .map(({ children: level }) =>
-                level.map(item => item.rect.boxWidth! + item.rect.marginWidth).reduce((a, b) => a + b, 0)
+                level
+                  .map(item =>
+                    item.rect.precentValues.width === undefined
+                      ? item.rect.boxWidth! + item.rect.marginWidth
+                      : item.styles['box-sizing'] === 'border-box'
+                      ? item.rect.marginWidth
+                      : item.rect.paddingWidth + item.rect.marginWidth
+                  )
+                  .reduce((a, b) => a + b, 0)
               )
           )
+          /* let _crossIndex = 0
+          let _levelLength = 0
+          levels.forEach(level => {
+
+          }) */
           setWidthOrHeightByStyle(layout.rect, maxWidth, false)
         })
       } else {
@@ -1688,7 +1089,7 @@ const parseLayout = (layout: DrawLayout, parentRAT?: RectAndStyleType) => {
   return computedLayout as ComputedLayout
 }
 const positionKeys = ['top', 'left', 'right', 'bottom'] as const
-type PositionKey = typeof positionKeys[number]
+type PositionKey = (typeof positionKeys)[number]
 const getLayoutPosition = (layout: ComputedLayout) => {
   const layoutPaddingLeft = layout.rect.padding[3]
   const layoutPaddingTop = layout.rect.padding[0]
@@ -1843,7 +1244,9 @@ const getLayoutPosition = (layout: ComputedLayout) => {
           }
         }
       } else {
-        const newLine = item.rect.crossIndex !== tempCrossIndex
+        const newLine =
+          item.rect.crossIndex !== tempCrossIndex ||
+          position.left + tempMainLength + item.rect.marginWidth + item.rect.boxWidth! > layout.rect.contentWidth!
         if (newLine) {
           tempCrossIndex = item.rect.crossIndex
           position.top += tempCrossLength
@@ -1867,75 +1270,7 @@ const getLayoutPosition = (layout: ComputedLayout) => {
   return layout
 }
 
-type TransformType =
-  | {
-      type: 'translate' | 'scale' | 'skew'
-      value: {
-        x: number
-        y: number
-      }
-    }
-  | {
-      type: 'rotate'
-      value: {
-        deg: number
-      }
-    }
-
-function createMatrix(transforms: TransformType[]) {
-  let matrix = [
-    [1, 0, 0],
-    [0, 1, 0],
-    [0, 0, 1]
-  ]
-  transforms.forEach(function (transform) {
-    switch (transform.type) {
-      case 'translate':
-        // matrix[0][2] += transform.value.x
-        // matrix[1][2] += transform.value.y
-        matrix = MT(matrix, [
-          [1, 0, transform.value.x],
-          [0, 1, transform.value.y],
-          [0, 0, 1]
-        ])!
-        break
-      case 'rotate':
-        {
-          const angle = (transform.value.deg * Math.PI) / 180
-          const cos = Math.cos(angle)
-          const sin = Math.sin(angle)
-          matrix = MT(matrix, [
-            [cos, -sin, 0],
-            [sin, cos, 0],
-            [0, 0, 1]
-          ])!
-        }
-        break
-      case 'scale':
-        matrix = MT(matrix, [
-          [transform.value.x, 0, 0],
-          [0, transform.value.y, 0],
-          [0, 0, 1]
-        ])!
-        break
-      case 'skew': {
-        const xtan = Math.tan((transform.value.x * Math.PI) / 180)
-        const ytan = Math.tan((transform.value.y * Math.PI) / 180)
-        matrix = MT(matrix, [
-          [1, xtan, 0],
-          [ytan, 1, 0],
-          [0, 0, 1]
-        ])!
-      }
-    }
-  })
-  return [matrix[0][0], matrix[1][0], matrix[0][1], matrix[1][1], matrix[0][2], matrix[1][2]] as SpecifiedLengthTuple<
-    number,
-    6
-  >
-}
-
-function createMatrix2(transforms: TransformType[]) {
+/* function createMatrix2(transforms: TransformType[]) {
   const matrix = [1, 0, 0, 1, 0, 0] as SpecifiedLengthTuple<number, 6>
   transforms.forEach(function (transform) {
     switch (transform.type) {
@@ -1979,494 +1314,8 @@ function createMatrix2(transforms: TransformType[]) {
     }
   })
   return matrix
-}
+} */
 
-const drawImage = async ({
-  canvas,
-  ctx,
-  canvasWidth,
-  canvasHeight,
-  imgSrc,
-  size,
-  postion,
-  repeat
-}: {
-  canvas: SampleCanvas.Canvas
-  ctx: any
-  canvasWidth: number
-  canvasHeight: number
-  imgSrc: string
-  postion?: 'top' | 'left' | 'bottom' | 'right' | 'center'
-  size?: 'cover' | 'contain'
-  repeat?: {
-    top?: number
-    left?: number
-    bottom?: number
-    right?: number
-  }
-}) => {
-  const image = windowInfo.createImage!(canvas)
-  await new Promise(resolve => {
-    image.onload = resolve
-    image.src = imgSrc
-  })
-  const { width, height } = image
-  const chw = width / height
-  let dWidth = 0
-  let dHeight = 0
-  if (postion === 'top') {
-    dWidth = canvasWidth
-    dHeight = canvasWidth / chw
-    ctx.drawImage(image, 0, 0, dWidth, dHeight)
-  } else if (postion === 'bottom') {
-    dWidth = canvasWidth
-    dHeight = canvasWidth / chw
-    ctx.drawImage(image, 0, canvasHeight - canvasWidth / chw, dWidth, dHeight)
-  } else if (postion === 'left') {
-    dWidth = canvasHeight * chw
-    dHeight = canvasHeight
-    ctx.drawImage(image, 0, 0, dWidth, dHeight)
-  } else if (postion === 'right') {
-    dWidth = canvasHeight * chw
-    dHeight = canvasHeight
-    ctx.drawImage(image, canvasWidth - canvasHeight * chw, 0, dWidth, dHeight)
-  } else if (postion === 'center') {
-    let l, t, w, h, sx, sy, sw, sh
-    const canvasWh = canvasWidth / canvasHeight
-    if (size === 'contain') {
-      if (canvasWh < chw) {
-        l = 0
-        t = (canvasHeight - canvasWidth / chw) / 2
-        w = canvasWidth
-        h = w / chw
-      } else {
-        l = (canvasWidth - canvasHeight * chw) / 2
-        t = 0
-        h = canvasHeight
-        w = h * chw
-      }
-      ctx.drawImage(image, l, t, w, h)
-    } else if (size === 'cover') {
-      if (canvasWh < chw) {
-        sw = height * canvasWh
-        sh = height
-        sx = (width - sw) / 2
-        sy = 0
-        l = 0
-        t = 0
-        w = canvasWidth
-        h = canvasHeight
-      } else {
-        sw = width
-        sh = width / canvasWh
-        sx = 0
-        sy = (height - sh) / 2
-        l = 0
-        t = 0
-        h = canvasHeight
-        w = canvasWidth
-      }
-      ctx.drawImage(image, sx, sy, sw, sh, l, t, w, h)
-    }
-  } else if (repeat) {
-    if (repeat.top !== undefined && repeat.bottom !== undefined) {
-      dWidth = canvasWidth
-      dHeight = canvasHeight - repeat.top - repeat.bottom
-      let len = dHeight
-      const top = repeat.top
-      while (len > 0) {
-        ctx.drawImage(image, 0, top + (dHeight - len), canvasWidth, len > width / chw ? width / chw : len)
-        len -= width / chw
-      }
-    } else if (repeat.left !== undefined && repeat.right !== undefined) {
-      dHeight = canvasHeight
-      dWidth = canvasWidth - repeat.left - repeat.right
-      let len = dWidth
-      const left = repeat.left
-      while (len > 0) {
-        ctx.drawImage(image, left + (dWidth - len), 0, len > height * chw ? height * chw : len, canvasHeight)
-        len -= height * chw
-      }
-    }
-  }
-  return { width: dWidth, height: dHeight }
-}
-const getImgUrl = (str: string) => {
-  const match = /url\(('|")?([^)(\1]+)\1\)$/.exec(str)
-  return match ? match[2] : ''
-}
-const drawItem = async (
-  canvas: SampleCanvas.Canvas,
-  ctx: SampleCanvas.RenderContext,
-  layout: ComputedLayout,
-  parentLeft = 0,
-  parentTop = 0
-) => {
-  parentLeft += layout.rect.left || 0
-  parentTop += layout.rect.top || 0
-  const tempParentLeft = parentLeft
-  const tempParentTop = parentTop
-  const parentCtx = ctx
-  if (layout.rect.transform) {
-    canvas = windowInfo.createCanvas!(true, layout.rect.boxWidth, layout.rect.boxHeight)
-    ctx = canvas.getContext('2d')
-    parentLeft = 0
-    parentTop = 0
-  }
-  if (layout.type === 'view') {
-    if (layout.styles.background) {
-      const bgWidth = layout.rect.boxWidth || 0
-      const bgHeight = layout.rect.boxHeight || 0
-      if (Array.isArray(layout.styles.background)) {
-        const bgCanvas = windowInfo.createCanvas!(true, bgWidth * windowInfo.dpr, bgHeight * windowInfo.dpr)
-        const bgCtx = bgCanvas.getContext('2d')
-        bgCtx.scale(windowInfo.dpr, windowInfo.dpr)
-
-        if (layout.styles['border-radius']) {
-          const width = bgWidth
-          const height = bgHeight
-
-          const borderRadius = getMarginOrPadding(layout.styles['border-radius'])
-          bgCtx.beginPath()
-          const pramas = [
-            { l: 0, t: 0, x: 1, y: 1, a: -Math.PI },
-            { l: width, t: 0, x: -1, y: 1, a: -Math.PI / 2 },
-            { l: width, t: height, x: -1, y: -1, a: 0 },
-            { l: 0, t: height, x: 1, y: -1, a: Math.PI / 2 }
-          ]
-          borderRadius.forEach((radius, index) => {
-            const prama = pramas[index]
-            if (radius) {
-              bgCtx.arc(prama.l + prama.x * radius, prama.t + prama.y * radius, radius, prama.a, prama.a + Math.PI / 2)
-            } else {
-              bgCtx.lineTo(prama.l, prama.t)
-            }
-          })
-          bgCtx.closePath()
-          bgCtx.clip()
-        }
-
-        const bgs = layout.styles.background
-        if (bgs.length === 3) {
-          const postion_str = ['top', 'left', 'bottom', 'right']
-          type Ps = 'top' | 'left' | 'bottom' | 'right'
-          const [startBg, centerBg, endBg] = bgs
-          const startPostionIndex = postion_str.indexOf(startBg.position as string)
-          const endPostionIndex = postion_str.indexOf(endBg.position as string)
-          const isVertical = (index: number) => ['top', 'bottom'].includes(postion_str[index])
-          if (Math.abs(startPostionIndex - endPostionIndex) === 2) {
-            const startImgUrl = getImgUrl(startBg.image || '')
-            const endImgUrl = getImgUrl(endBg.image || '')
-            if (startImgUrl && endImgUrl) {
-              const { width: startWidth, height: startHeight } = await drawImage({
-                canvas: bgCanvas,
-                ctx: bgCtx,
-                canvasWidth: bgWidth,
-                canvasHeight: bgHeight,
-                imgSrc: startImgUrl,
-                postion: startBg.position as Ps
-              })
-              const { width: endWidth, height: endHeight } = await drawImage({
-                canvas: bgCanvas,
-                ctx: bgCtx,
-                canvasWidth: bgWidth,
-                canvasHeight: bgHeight,
-                imgSrc: endImgUrl,
-                postion: endBg.position as Ps
-              })
-              if (centerBg.color) {
-                bgCtx.fillStyle = centerBg.color
-                if (isVertical(startPostionIndex)) {
-                  bgCtx.fillRect(0, startHeight, bgWidth, bgHeight - startHeight - endHeight)
-                } else {
-                  bgCtx.fillRect(startWidth, 0, bgWidth - startWidth - endWidth, bgHeight)
-                }
-              } else if (centerBg.repeat) {
-                if (centerBg.repeat === 'repeat-y') {
-                  const centerImgUrl = getImgUrl(centerBg.image || '')
-                  centerImgUrl &&
-                    (await drawImage({
-                      canvas: bgCanvas,
-                      ctx: bgCtx,
-                      canvasWidth: bgWidth,
-                      canvasHeight: bgHeight,
-                      imgSrc: centerImgUrl,
-                      repeat: {
-                        [startBg.position as Ps]: isVertical(startPostionIndex) ? startHeight : startWidth,
-                        [endBg.position as Ps]: isVertical(endPostionIndex) ? endHeight : endWidth
-                      }
-                    }))
-                }
-              }
-            }
-          }
-        } else if (bgs.length === 1) {
-          const bg = bgs[0]
-          const imgUrl = getImgUrl(bg.image || '')
-          if (bg.position === 'center') {
-            const size = bg.size === 'contain' ? 'contain' : 'cover'
-            await drawImage({
-              canvas: bgCanvas,
-              ctx: bgCtx,
-              canvasWidth: bgWidth,
-              canvasHeight: bgHeight,
-              imgSrc: imgUrl,
-              postion: 'center',
-              size
-            })
-          }
-        }
-        ctx.drawImage(bgCanvas, parentLeft, parentTop, bgWidth, bgHeight)
-        if (layout.styles.border) {
-          // ???
-          const borderArr = getBorderOption(layout.styles.border)
-          if (borderArr) {
-            bgCtx.lineWidth = borderArr[0]
-            bgCtx.strokeStyle = borderArr[2]
-            bgCtx.stroke()
-          }
-        }
-      } else {
-        if (layout.styles['border-radius']) {
-          const width = (layout.rect.boxWidth || 0) + layout.rect.padding[1] + layout.rect.padding[3]
-          const height = layout.rect.boxHeight! + layout.rect.padding[0] + layout.rect.padding[2]
-
-          const borderRadius = getMarginOrPadding(layout.styles['border-radius'])
-          ctx.beginPath()
-          const pramas = [
-            { l: parentLeft, t: parentTop, x: 1, y: 1, a: -Math.PI },
-            { l: parentLeft + width, t: parentTop, x: -1, y: 1, a: -Math.PI / 2 },
-            { l: parentLeft + width, t: parentTop + height, x: -1, y: -1, a: 0 },
-            { l: parentLeft, t: parentTop + height, x: 1, y: -1, a: Math.PI / 2 }
-          ]
-          borderRadius.forEach((radius, index) => {
-            const prama = pramas[index]
-            if (radius) {
-              ctx.arc(prama.l + prama.x * radius, prama.t + prama.y * radius, radius, prama.a, prama.a + Math.PI / 2)
-            } else {
-              ctx.lineTo(prama.l, prama.t)
-            }
-          })
-          ctx.closePath()
-          if (layout.styles.border) {
-            const borderArr = getBorderOption(layout.styles.border)
-            if (borderArr) {
-              ctx.lineWidth = borderArr[0]
-              ctx.strokeStyle = borderArr[2]
-              ctx.stroke()
-            }
-          }
-          ctx.fillStyle = layout.styles.background
-          ctx.fill()
-        } else {
-          ctx.fillStyle = layout.styles.background
-          ctx.fillRect(parentLeft, parentTop, bgWidth, bgHeight)
-        }
-      }
-    }
-    if (layout.content) {
-      ctx.font = `${layout.styles['font-style'] || ''} ${layout.styles['font-weight'] || ''} ${
-        layout.styles['font-size']
-      }px/${layout.styles['line-height']}px PingFangSC-Medium, "PingFang SC", sans-serif`
-      ctx.fillStyle = layout.styles.color!
-      const offsetX = {
-        left: 0,
-        center: (layout.rect.boxWidth || 0) / 2,
-        right: layout.rect.boxWidth || 0
-      }
-      ctx.textAlign = layout.styles['text-align'] || 'left'
-      ctx.textBaseline = 'bottom'
-      const offsetY = -(layout.styles['line-height']! - layout.styles['font-size']!) / 2
-      if (layout.textLines) {
-        // ctx.strokeRect(parentLeft + layout.rect.padding[3], parentTop + layout.rect.padding[0], layout.rect.boxWidth, layout.styles['line-height'])
-        let lines = [...layout.textLines]
-        if (layout.styles['line-clamp']) {
-          const clamp = layout.styles['line-clamp']
-          if (lines.length > clamp) {
-            lines[clamp - 1] = lines[clamp - 1].replace(/.{1}$/, '...')
-            lines = lines.slice(0, clamp)
-          }
-        }
-        lines.forEach((e, i) => {
-          ctx.fillText(
-            e,
-            parentLeft + layout.rect.padding[3] + offsetX[ctx.textAlign as keyof typeof offsetX] || 0,
-            parentTop + layout.rect.padding[0] + (i + 1) * layout.styles['line-height']! + offsetY,
-            layout.rect.boxWidth
-          )
-        })
-      } else {
-        // ctx.strokeRect(parentLeft + layout.rect.padding[3], parentTop + layout.rect.padding[0], layout.rect.boxWidth, layout.styles['line-height'])
-        ctx.fillText(
-          layout.content,
-          parentLeft + layout.rect.padding[3] + offsetX[ctx.textAlign as keyof typeof offsetX] || 0,
-          parentTop + layout.rect.padding[0] + layout.styles['line-height']! + offsetY,
-          layout.rect.boxWidth
-        )
-      }
-    }
-  } else if (layout.type === 'img' && layout.content) {
-    const bgWidth = (layout.rect.boxWidth || 0) + layout.rect.padding[1] + layout.rect.padding[3]
-    const bgHeight = layout.rect.boxHeight! + layout.rect.padding[2] + layout.rect.padding[0]
-    const bgCanvas = windowInfo.createCanvas!(true, bgWidth * windowInfo.dpr, bgHeight * windowInfo.dpr)
-    const bgCtx = bgCanvas.getContext('2d')
-    bgCtx.scale(windowInfo.dpr, windowInfo.dpr)
-
-    if (layout.styles['border-radius']) {
-      const width = bgWidth
-      const height = bgHeight
-
-      const borderRadius = getMarginOrPadding(layout.styles['border-radius'])
-      bgCtx.beginPath()
-      const pramas = [
-        { l: 0, t: 0, x: 1, y: 1, a: -Math.PI },
-        { l: width, t: 0, x: -1, y: 1, a: -Math.PI / 2 },
-        { l: width, t: height, x: -1, y: -1, a: 0 },
-        { l: 0, t: height, x: 1, y: -1, a: Math.PI / 2 }
-      ]
-      borderRadius.forEach((radius, index) => {
-        const prama = pramas[index]
-        if (radius) {
-          bgCtx.arc(prama.l + prama.x * radius, prama.t + prama.y * radius, radius, prama.a, prama.a + Math.PI / 2)
-        } else {
-          bgCtx.lineTo(prama.l, prama.t)
-        }
-      })
-      bgCtx.closePath()
-      bgCtx.clip()
-    }
-
-    const imgUrl = layout.content
-    if (layout.styles['object-fit'] === undefined) {
-      const image = windowInfo.createImage!(canvas)
-      await new Promise(resolve => {
-        image.onload = resolve
-        image.src = layout.content!
-      })
-      const { width, height } = image
-      bgCtx.drawImage(
-        image,
-        0,
-        0,
-        layout.rect.boxWidth!,
-        layout.rect.boxHeight || (layout.rect.boxWidth! * height) / width
-      )
-    } else {
-      const size = layout.styles['object-fit'] === 'contain' ? 'contain' : 'cover'
-      await drawImage({
-        canvas: bgCanvas,
-        ctx: bgCtx,
-        canvasWidth: bgWidth,
-        canvasHeight: bgHeight,
-        imgSrc: imgUrl,
-        postion: 'center',
-        size
-      })
-    }
-    ctx.drawImage(bgCanvas, parentLeft, parentTop, bgWidth, bgHeight)
-  }
-  if (layout.children && layout.children.length) {
-    const contentWidth = (layout.rect.boxWidth || 0) + layout.rect.padding[1] + layout.rect.padding[3]
-    const contentHeight = layout.rect.boxHeight! + layout.rect.padding[0] + layout.rect.padding[2]
-    const normalChildren: ComputedLayout[] = []
-    const transformChildren: ComputedLayout[] = []
-    const zIndexChildren: ComputedLayout[] = []
-    layout.children.forEach(item => {
-      if (item.styles.position === undefined) {
-        if (item.rect.transform) {
-          transformChildren.push(item)
-        } else {
-          normalChildren.push(item)
-        }
-      } else {
-        zIndexChildren.push(item)
-      }
-    })
-    const sortChildren: ComputedLayout[] = [
-      ...normalChildren,
-      ...transformChildren,
-      ...zIndexChildren.sort((a, b) => (a.styles['z-index'] || 0) - (b.styles['z-index'] || 0))
-    ]
-    for (const item of sortChildren) {
-      if (item.styles.position === 'absolute') {
-        item.rect.left =
-          item.rect.left === undefined
-            ? contentWidth - item.rect.right! - item.rect.boxWidth! - item.rect.padding[1] - item.rect.padding[3]
-            : item.rect.left
-        item.rect.top =
-          item.rect.top === undefined
-            ? contentHeight - item.rect.bottom! - item.rect.boxHeight! - item.rect.padding[0] - item.rect.padding[2]
-            : item.rect.top
-      }
-      await drawItem(canvas, ctx, item, parentLeft, parentTop)
-    }
-  }
-  if (layout.rect.transform) {
-    const originX = layout.rect.transformOrigin.xPrecent
-      ? (layout.rect.boxWidth! * layout.rect.transformOrigin.x) / 100
-      : layout.rect.transformOrigin.x
-    const originY = layout.rect.transformOrigin.yPrecent
-      ? (layout.rect.boxHeight! * layout.rect.transformOrigin.y) / 100
-      : layout.rect.transformOrigin.y
-    const transform = layout.rect.transform
-      .map(item => {
-        switch (item.type) {
-          case 'translate': {
-            const value = val2XY(item.value, layout.rect.boxWidth!, layout.rect.boxHeight!)
-            return {
-              type: item.type,
-              value: {
-                x: value.x / windowInfo.dpr,
-                y: value.y / windowInfo.dpr
-              }
-            }
-          }
-          case 'scale':
-            return {
-              type: item.type,
-              value: {
-                x: +item.value[0] * windowInfo.dpr,
-                y: +(item.value.length > 1 ? item.value[1] : item.value[0]) * windowInfo.dpr
-              }
-            }
-          case 'rotate':
-            return {
-              type: item.type,
-              value: {
-                deg: parseLengthStr(item.value[0]).value
-              }
-            }
-          case 'skew':
-            return {
-              type: item.type,
-              value: {
-                x: parseLengthStr(item.value[0]).value,
-                y: item.value.length > 1 ? parseLengthStr(item.value[1]) : 0
-              }
-            }
-          default:
-            return null
-        }
-      })
-      .filter(item => item) as TransformType[]
-    const matrix = createMatrix([
-      {
-        type: 'translate',
-        value: { x: tempParentLeft + originX, y: tempParentTop + originY }
-      },
-      ...transform
-    ])
-    parentCtx.transform(...matrix)
-    parentCtx.drawImage(
-      canvas,
-      -originX / windowInfo.dpr,
-      -originY / windowInfo.dpr,
-      canvas.width / windowInfo.dpr,
-      canvas.height / windowInfo.dpr
-    )
-    parentCtx.setTransform(windowInfo.dpr, 0, 0, windowInfo.dpr, 0, 0)
-  }
-}
 export const draw = async (layout: DrawLayout) => {
   try {
     const computedLayout = parseLayout(layout)
@@ -2478,7 +1327,7 @@ export const draw = async (layout: DrawLayout) => {
     const ctx = canvas.getContext('2d')
     ctx.scale(windowInfo.dpr, windowInfo.dpr)
     await drawItem(canvas, ctx, layoutRect)
-    return { canvas, width: rootWidth, height: rootHeight }
+    return { canvas, width: rootWidth, height: rootHeight, layout: layoutRect }
   } catch (err) {
     console.log(1958, err)
   }
@@ -2489,6 +1338,10 @@ export const draw = async (layout: DrawLayout) => {
         resolve({ path: res.tempFilePath, width: rootWidth * windowInfo.dpr, height: rootHeight * windowInfo.dpr })
     })
   }) */
+}
+
+export const ParseBackgroundShorthand2 = (background: string) => {
+  const reg_split = /\b/
 }
 /*
 eg: index.ts (in browser)

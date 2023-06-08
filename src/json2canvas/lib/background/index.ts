@@ -1,5 +1,6 @@
 import { SpecifiedLengthTuple } from '../../util/type'
-import { LayoutRect, SampleImageType, windowInfo } from '../..'
+import { SampleImageType, windowInfo } from '../..'
+import { LayoutRect } from '../rect'
 import {
   colorKeyWordRGB,
   compareObject,
@@ -8,219 +9,24 @@ import {
   isAngleStr,
   isNonNullable,
   lengthReg,
-  parseLengthStr,
-  precentStrReg,
-  reg_hex
+  reg_hex,
+  parseStr2Ast,
+  AstItem,
+  AstFn,
+  parseAstItem2AstFnAndStr,
+  LengthParseObj,
+  parseFnParams
 } from '../../util/common'
 import { ReactCompute } from '../../util/react_compute'
-type LengthFn = (length: number) => number
-type ParamItem = string | MatchFn
-interface MatchFnBase {
-  match: string
-  type: string
-  params: (ParamItem[] | string)[]
-  index: number
-  length: number
-  level: number
-  parent?: MatchFn
-  fn?: (env: any) => number
-}
-interface MatchFnExtend extends MatchFnBase {
-  type: 'rgb' | 'rgba' | 'hsl' | 'hsla'
-  fn?: (env: any) => any
-}
 
-type MatchFn = MatchFnBase | MatchFnExtend
-
-export const parseBackgroundShorthand = async (background: string, rect: LayoutRect) => {
+export const parseBackgroundShorthand = async (bgCanvas: SampleCanvas.Canvas, background: string, rect: LayoutRect) => {
   // bstr = 'url(https://xxx.xxx.xxx) no-repeat top/contain,linear-gradient(90deg, rgba(220,0,123,0.6), #fce5bd 80%, #fce1b6) no-repeat bottom/750px 200px,#ff0000'
-  const pickUpFn = (str: string) => {
-    const reg_fn = /([\w-]+)\(([^)(]*)\)/g
-    const match_fn: MatchFn[][] = []
-    let match_fn_complete = false
-    let _str = str
-    let fn_level = 0
-    const parseParam = (param: ParamItem) => {
-      if (typeof param === 'string') {
-        param = param.trim()
-        if (precentStrReg.test(param)) {
-          const val = +precentStrReg.exec(param)![1]
-          return (length: number) => (val * length) / 100
-        } else {
-          return getLengthValue(param)
-        }
-      } else {
-        return param
-      }
-    }
-    const parseFnParams = (fnItem: MatchFn) => {
-      let _params: (LengthFn | MatchFn | string | number)[] = []
-      const execFn = (e: (typeof _params)[number], length: number) =>
-        typeof e === 'function' ? e(length) : typeof e === 'object' ? e.fn!(length) : getLengthValue(e, length)
-      switch (fnItem.type) {
-        case 'calc':
-          _params = fnItem.params
-            .flat()
-            .map(item => {
-              if (typeof item === 'string') {
-                const m = /\s+\+\s+|\s+-\s+|\*|\//.exec(item)
-                if (m !== null) {
-                  return [item.slice(0, m.index).trim(), m[0].trim(), item.slice(m.index + m[0].length).trim()].filter(
-                    e => e
-                  )
-                } else {
-                  return item.trim()
-                }
-              } else {
-                return item
-              }
-            })
-            .flat()
-            .map((e, i) => (i === 1 ? e : parseParam(e)))
-          fnItem.fn = (length: number) => {
-            const vals = [_params[0], _params[2]].map(e => execFn(e, length)) as [number, number]
-            let res = 0
-            switch (_params[1]) {
-              case '+':
-                res = vals[0] + vals[1]
-                break
-              case '-':
-                res = vals[0] - vals[1]
-                break
-              case '*':
-                res = vals[0] * vals[1]
-                break
-              case '/':
-                res = vals[1] ? vals[0] / vals[1] : 0
-                break
-            }
-            return res
-          }
-          break
-        case 'min':
-        case 'max':
-          _params = fnItem.params
-            .flat()
-            .filter(e => (typeof e === 'string' ? !!e.trim() : true))
-            .map(e => parseParam(e))
-          fnItem.fn = (length: number) => {
-            const vals = _params.map(e => +execFn(e, length))
-            return fnItem.type === 'min' ? Math.min(...vals) : Math.max(...vals)
-          }
-          break
-        case 'rgb':
-        case 'hsl':
-        case 'rgba':
-        case 'hsla':
-          _params = fnItem.params
-            .map(item => {
-              if (typeof item === 'string') {
-                return item.trim().split(/\s*\/\s*|\s+/)
-              } else {
-                return item
-              }
-            })
-            .flat()
-          fnItem.fn = (length: number) => {
-            return _params.map(item => (typeof item === 'object' ? item.fn!(length) : +item))
-          }
-          break
-      }
-    }
-    while (!match_fn_complete) {
-      match_fn_complete = true
-      match_fn[fn_level] = []
-      _str = _str.replace(reg_fn, (...args) => {
-        const [match, type, paramStr, index, _str] = args as [string, string, string, number, string]
-        const paramsSplitOffsets: number[] = [-1]
-        let _offset = -1
-        while (
-          paramStr &&
-          ((_offset = paramStr.indexOf(',', paramsSplitOffsets[paramsSplitOffsets.length - 1] + 1)), _offset > -1)
-        ) {
-          paramsSplitOffsets.push(_offset)
-        }
-        paramsSplitOffsets.shift()
-        const params = paramStr.split(',')
-        match_fn_complete = false
-
-        const item: MatchFn = { match, type, index, length: match.length, level: fn_level, params: [] }
-        if (fn_level) {
-          let offset = item.index + item.type.length + 1
-          const paramsOffsetRangeArr: [number, number][] = []
-          params.forEach((t, i) => {
-            paramsOffsetRangeArr.push([offset, offset + t.length])
-            offset += t.length + 1
-            item.params[i] = t.trim()
-          })
-          match_fn[fn_level - 1].forEach(e => {
-            if (e.index >= item.index && e.index + e.length <= item.index + item.length) {
-              const _index = paramsOffsetRangeArr.findIndex(t => e.index >= t[0] && e.index + e.length <= t[1])
-              if (_index > -1) {
-                const _str$ = params[_index] as string
-                const istart = e.index - paramsOffsetRangeArr[_index][0]
-                const iend = istart + e.length
-                item.params[_index] = [
-                  _str$.slice(0, istart).replace(/^\s+/, ''),
-                  e,
-                  _str$.slice(iend).replace(/\s+$/, '')
-                ].filter(t => t)
-              }
-              e.parent = item
-            }
-          })
-        } else {
-          item.params = params as unknown as (ParamItem[] | string)[]
-        }
-        parseFnParams(item)
-        match_fn[fn_level].push(item)
-        return '*'.repeat(match.length)
-      })
-      fn_level++
-    }
-    return {
-      fn_arr: match_fn
-        .flat()
-        .filter(item => !item.parent)
-        .sort((a, b) => a.index - b.index),
-      replaceStr: _str
-    }
-  }
-
-  const { fn_arr, replaceStr } = pickUpFn(background)
-  let _offset = 0
-  const splitByseparator = (str: string, separators: { [k: string]: boolean }) => {
-    const res: string[] = []
-    let item = ''
-    for (let i = 0; i < str.length; i++) {
-      const chart = str.charAt(i)
-      if (chart in separators) {
-        if (item) {
-          res.push(item)
-        }
-        item = ''
-        if (separators[chart]) {
-          res.push(chart)
-        }
-      } else {
-        item += chart
-      }
-    }
-    if (item) {
-      res.push(item)
-    }
-    return res
-  }
-  const separators = { ' ': false, ',': true, '/': true }
-  const splitArr = fn_arr
-    .map(item => [
-      ...splitByseparator(replaceStr.slice(_offset, item.index), separators),
-      ((_offset = item.index + item.length), item)
-    ])
-    .flat()
-    .concat(...splitByseparator(replaceStr.slice(_offset), separators))
-    .filter(item => item)
-  const backgroundItemgroups = []
+  const splitArr = parseStr2Ast(background)
+    .children?.filter(item => item.type !== 'space')
+    .map(item => {
+      const e = parseAstItem2AstFnAndStr(item)
+      return e instanceof AstFn ? parseFnParams(e) : e
+    })!
   const prop_names = [
     ['no-repeat', 'repeat-x', 'repeat-y', 'repeat'],
     ['top', 'left', 'right', 'bottom', 'center'],
@@ -232,75 +38,82 @@ export const parseBackgroundShorthand = async (background: string, rect: LayoutR
     prop_names.map((e, i) => e.map(t => [t, ['repeat', 'position', 'size', 'attachment', 'clip_origin'][i]])).flat()
   )
   let tempDist: Partial<{
-    color: string | MatchFn
-    image: MatchFn
-    size: (string | MatchFn)[]
-    position: (string | MatchFn)[]
+    color: string | AstFn
+    image: AstFn
+    size: (string | AstFn | LengthParseObj)[]
+    position: (string | AstFn | LengthParseObj)[]
     repeat: 'no-repeat' | 'repeat-x' | 'repeat-y' | 'repeat'
     attachment: 'scroll' | 'fixed' | 'local'
     clip_origin: ('border-box' | 'padding-box' | 'content-box')[] // can not support 'text'
   }> = {}
   const tempDistArr = []
   let endNeedPush = false
-  splitArr.forEach(item => {
-    endNeedPush = true
-    if (typeof item === 'string') {
-      if (item in prop_names_dist) {
-        const _prop = prop_names_dist[item]
-        switch (_prop) {
-          case 'size':
-            tempDist.size = tempDist.size || []
-            tempDist.size.push(item)
-            break
-          case 'position':
-            tempDist.position = tempDist.position || []
-            tempDist.position.push(item)
-            break
-          case 'repeat':
-            tempDist.repeat = item as NonNullable<typeof tempDist.repeat>
-            break
-          case 'clip_origin':
-            tempDist.clip_origin = tempDist.clip_origin || []
-            tempDist.clip_origin.push(item as NonNullable<(typeof tempDist.clip_origin)[number]>)
-            break
-            break
-          case 'attachment':
-            tempDist.attachment = item as NonNullable<typeof tempDist.attachment>
-            break
-        }
-      } else {
-        if (item === ',') {
-          tempDistArr.push(tempDist)
-          endNeedPush = false
-          tempDist = {}
-        } else if (item === '/') {
-          tempDist.size = tempDist.size || []
-        } else if (lengthReg.test(item)) {
-          if (tempDist.size) {
-            tempDist.size.push(item)
-          } else {
-            tempDist.position = tempDist.position || []
-            tempDist.position.push(item)
+  splitArr &&
+    splitArr.forEach(item => {
+      endNeedPush = true
+      if (typeof item === 'string') {
+        if (item in prop_names_dist) {
+          const _prop = prop_names_dist[item]
+          switch (_prop) {
+            case 'size':
+              tempDist.size = tempDist.size || []
+              tempDist.size.push(item)
+              break
+            case 'position':
+              tempDist.position = tempDist.position || []
+              tempDist.position.push(item)
+              break
+            case 'repeat':
+              tempDist.repeat = item as NonNullable<typeof tempDist.repeat>
+              break
+            case 'clip_origin':
+              tempDist.clip_origin = tempDist.clip_origin || []
+              tempDist.clip_origin.push(item as NonNullable<(typeof tempDist.clip_origin)[number]>)
+              break
+            case 'attachment':
+              tempDist.attachment = item as NonNullable<typeof tempDist.attachment>
+              break
           }
         } else {
-          tempDist.color = item
+          if (item === ',') {
+            tempDistArr.push(tempDist)
+            endNeedPush = false
+            tempDist = {}
+          } else if (item === '/') {
+            tempDist.size = tempDist.size || []
+          } else if (lengthReg.test(item)) {
+            if (tempDist.size) {
+              tempDist.size.push(item)
+            } else {
+              tempDist.position = tempDist.position || []
+              tempDist.position.push(item)
+            }
+          } else {
+            tempDist.color = item
+          }
         }
-      }
-    } else {
-      if (item.type === 'calc') {
+      } else if (item instanceof LengthParseObj) {
         if (tempDist.size) {
           tempDist.size.push(item)
         } else {
           tempDist.position = tempDist.position || []
           tempDist.position.push(item)
         }
-      } else if (['rgb', 'rgba', 'hls', 'hlsa'].includes(item.type)) {
-        tempDist.color = item
-      } else if (['url', 'linear-gradient'].includes(item.type)) {
-        tempDist.image = item
+      } else {
+        if (item.type === 'calc') {
+          if (tempDist.size) {
+            tempDist.size.push(item)
+          } else {
+            tempDist.position = tempDist.position || []
+            tempDist.position.push(item)
+          }
+        } else if (['rgb', 'rgba', 'hls', 'hlsa'].includes(item.type)) {
+          tempDist.color = item
+        } else if (['url', 'linear-gradient'].includes(item.type)) {
+          tempDist.image = item
+        }
       }
-    }
-  })
+    })
   if (endNeedPush) {
     tempDistArr.push(tempDist)
   }
@@ -308,7 +121,7 @@ export const parseBackgroundShorthand = async (background: string, rect: LayoutR
     color?: string
     image?: {
       type: string
-      params: (string | ParamItem[])[]
+      params: (string | AstFn | LengthParseObj)[]
       el?: SampleImageType | SampleCanvas.Canvas
     }
     size?: {
@@ -330,8 +143,7 @@ export const parseBackgroundShorthand = async (background: string, rect: LayoutR
     e => e,
     { immediate: true }
   )
-  const backgroundCanvas = windowInfo.createCanvas!(true, rect.boxWidth, rect.boxHeight)
-  const backgroundCtx = backgroundCanvas.getContext('2d')
+  const backgroundCtx = bgCanvas.getContext('2d')
   for (const item of tempDistArr.reverse()) {
     const backgroundItem = ReactCompute.reactive<BackgroundItem>(
       {
@@ -360,7 +172,7 @@ export const parseBackgroundShorthand = async (background: string, rect: LayoutR
         el.onload = () => {
           backgroundItem.image!.el = el
         }
-        el.src = item.image.params[0] as string
+        el.src = item.image.params.join('')
       }
     }
     if (item.clip_origin && item.clip_origin.length) {
@@ -383,7 +195,7 @@ export const parseBackgroundShorthand = async (background: string, rect: LayoutR
       }
       if (rgba) {
         backgroundCtx.fillStyle = `rgba(${rgba.join(',')})`
-        backgroundCtx.fillRect(0, 0, backgroundCanvas.width, backgroundCanvas.height)
+        backgroundCtx.fillRect(0, 0, rect.boxWidth!, rect.boxHeight!)
       }
     } else if (item.image) {
       if (['url', 'linear-gradient'].includes(item.image.type)) {
@@ -459,8 +271,11 @@ export const parseBackgroundShorthand = async (background: string, rect: LayoutR
             } else if (['cover', 'contain'].includes(item.size[0])) {
               backgroundRect.image.fit = item.size[0]
             }
-          } else if (item.size[0].fn) {
-            backgroundRect.image.width = item.size[0].fn(backgroundRect.origin.width)
+          } else if (item.size[0]) {
+            backgroundRect.image.width =
+              item.size[0] instanceof LengthParseObj
+                ? getLengthValue(item.size[0], backgroundRect.origin.width)
+                : item.size[0].fn!(backgroundRect.origin.width)
             if (item.size.length === 1) {
               backgroundRect.image.heightAuto = true
             }
@@ -472,6 +287,8 @@ export const parseBackgroundShorthand = async (background: string, rect: LayoutR
               } else if (item.size[1] === 'auto') {
                 backgroundRect.image.heightAuto = true
               }
+            } else if (item.size[1] instanceof LengthParseObj) {
+              backgroundRect.image.height = getLengthValue(item.size[1], backgroundRect.origin.height)
             } else if (item.size[1].fn) {
               backgroundRect.image.height = item.size[1].fn(backgroundRect.origin.height)
             }
@@ -514,9 +331,13 @@ export const parseBackgroundShorthand = async (background: string, rect: LayoutR
           }
         } else {
           let gradientAngle = 0
-          const param_1st = item.image!.params[0]
+          const _group = item.image!.params.reduce<(string | AstFn | LengthParseObj)[][]>(
+            (a, b) => (b === ',' ? a.push([]) : a[a.length - 1].push(b), a),
+            [[]]
+          )
+          const param_1st = _group[0][0]
           let param_1st_is_angle = true
-          const colorsGroup = [...item.image!.params]
+          const colorsGroup = [..._group]
           if (typeof param_1st === 'string') {
             const reg_dir = /to((?:\s+(?:top|bottom|left|right)){1,2})/
             if (reg_dir.test(param_1st)) {
@@ -669,20 +490,14 @@ export const parseBackgroundShorthand = async (background: string, rect: LayoutR
                 },
                 colors: _points.map(item => ({
                   color: item.color,
-                  precent: (item.length! - _points[0].length!) / totalLength
+                  percent: (item.length! - _points[0].length!) / totalLength
                 }))
               }
             }
           }
           let parseError = false
           const gradientPoints = colorsGroup
-            .map(item => {
-              if (typeof item === 'string') {
-                return item.trim().split(/\s+/)
-              } else {
-                return item.map(e => (typeof e === 'string' ? e.trim().split(/\s+/) : e)).flat()
-              }
-            })
+            .map(item => item.flat())
             .map(item => {
               let rgba: SpecifiedLengthTuple<number, 4> | undefined = undefined
               const points: GradientPoint[] = []
@@ -697,7 +512,7 @@ export const parseBackgroundShorthand = async (background: string, rect: LayoutR
                     valueFn: length => getLengthValue(item_1st, length)
                   })
                 }
-              } else {
+              } else if (item_1st instanceof AstFn) {
                 if (['rgb', 'rgba', 'hsl', 'hsla'].includes(item_1st.type)) {
                   points.push({
                     color: item_1st.fn!(0)
@@ -720,7 +535,7 @@ export const parseBackgroundShorthand = async (background: string, rect: LayoutR
                       color: rgba,
                       valueFn: length => getLengthValue(e, length)
                     })
-                  } else {
+                  } else if (e instanceof AstFn) {
                     points.push({
                       color: rgba,
                       valueFn: length => e.fn!(length)
@@ -750,7 +565,7 @@ export const parseBackgroundShorthand = async (background: string, rect: LayoutR
               lineGradientParams.endPoint.y
             )
             lineGradientParams.colors.forEach(e => {
-              gradient.addColorStop(e.precent, `rgba(${e.color!.join(',')})`)
+              gradient.addColorStop(e.percent, `rgba(${e.color!.join(',')})`)
             })
             gradientCtx.fillStyle = gradient
             gradientCtx.fillRect(0, 0, gradientWidth, gradientHeight)
@@ -890,6 +705,8 @@ export const parseBackgroundShorthand = async (background: string, rect: LayoutR
                   } else {
                     return getLengthValue(e, xLength)
                   }
+                } else if (e instanceof LengthParseObj) {
+                  return getLengthValue(e, xLength)
                 } else {
                   return e.fn!(xLength)
                 }
@@ -907,6 +724,8 @@ export const parseBackgroundShorthand = async (background: string, rect: LayoutR
                   } else {
                     return getLengthValue(e, yLength)
                   }
+                } else if (e instanceof LengthParseObj) {
+                  return getLengthValue(e, yLength)
                 } else {
                   return e.fn!(yLength)
                 }
@@ -929,7 +748,7 @@ export const parseBackgroundShorthand = async (background: string, rect: LayoutR
           y: (backgroundItem.position?.y || 0) + backgroundRect.origin.top
         }
         const repeatAreas: RepeatArea[] = []
-        if (item.repeat && item.repeat !== 'no-repeat') {
+        if (!item.repeat || item.repeat !== 'no-repeat') {
           const xSlices = [0, imageRect.x, imageRect.x + imageRect.w, backgroundRect.clip.width]
           const xWidths = xSlices.reduce<[number, number[]]>(
             (a, b, i) => (i && a[1].push(b - a[0]), (a[0] = b), a),
@@ -991,7 +810,7 @@ export const parseBackgroundShorthand = async (background: string, rect: LayoutR
                         pushArea(area, iw, ih)
                       }
                       break
-                    case 'repeat':
+                    default:
                       pushArea(area, iw, ih)
                       break
                   }
@@ -1021,5 +840,5 @@ export const parseBackgroundShorthand = async (background: string, rect: LayoutR
       }
     }
   }
-  return backgroundCanvas
+  return bgCanvas
 }

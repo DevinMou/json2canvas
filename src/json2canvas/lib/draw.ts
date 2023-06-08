@@ -1,5 +1,5 @@
 import { ComputedLayout, windowInfo } from '..'
-import { getBorderOption, getMarginOrPadding, parseLengthStr, precentStrReg } from '../util/common'
+import { getBorderOption, getMarginOrPadding, parseLengthStr, percentStrReg } from '../util/common'
 import { MT } from '../util/sample_matrix'
 import { NOS, SpecifiedLengthTuple } from '../util/type'
 import { parseBackgroundShorthand } from './background'
@@ -33,8 +33,8 @@ const val2XY = (valArr: NOS[], parentValWidth: number, parentValHeight: number) 
       if (index === 1) {
         res.y = item
       }
-    } else if (precentStrReg.test(item || '')) {
-      const pv = +precentStrReg.exec(item)![1]
+    } else if (percentStrReg.test(item || '')) {
+      const pv = +percentStrReg.exec(item)![1]
       if (index === 0) {
         res.x = (parentValWidth * pv) / 100
         res.y = (parentValHeight * pv) / 100
@@ -295,10 +295,12 @@ export const drawItem = async (
               })
               if (centerBg.color) {
                 bgCtx.fillStyle = centerBg.color
+                // const fixErr = 0.5
+                const fixErr = 0
                 if (isVertical(startPostionIndex)) {
-                  bgCtx.fillRect(0, startHeight, bgWidth, bgHeight - startHeight - endHeight)
+                  bgCtx.fillRect(0, startHeight - fixErr, bgWidth, bgHeight - startHeight - endHeight + fixErr * 2)
                 } else {
-                  bgCtx.fillRect(startWidth, 0, bgWidth - startWidth - endWidth, bgHeight)
+                  bgCtx.fillRect(startWidth - fixErr, 0, bgWidth - startWidth - endWidth + fixErr * 2, bgHeight)
                 }
               } else if (centerBg.repeat) {
                 if (centerBg.repeat === 'repeat-y') {
@@ -346,38 +348,33 @@ export const drawItem = async (
           }
         }
       } else {
-        const bgCanvas = await parseBackgroundShorthand(layout.styles.background, layout.rect)
-        if (bgCanvas && bgCanvas.width && bgCanvas.height) {
-          const bgCtx = bgCanvas!.getContext('2d')
-          if (layout.styles['border-radius']) {
-            const width = bgWidth
-            const height = bgHeight
+        const bgCanvas = windowInfo.createCanvas!(true, layout.rect.boxWidth!, layout.rect.boxHeight)
+        const bgCtx = bgCanvas!.getContext('2d')
+        if (layout.styles['border-radius']) {
+          const width = bgWidth
+          const height = bgHeight
 
-            const borderRadius = getMarginOrPadding(layout.styles['border-radius'])
-            bgCtx.beginPath()
-            const pramas = [
-              { l: 0, t: 0, x: 1, y: 1, a: -Math.PI },
-              { l: width, t: 0, x: -1, y: 1, a: -Math.PI / 2 },
-              { l: width, t: height, x: -1, y: -1, a: 0 },
-              { l: 0, t: height, x: 1, y: -1, a: Math.PI / 2 }
-            ]
-            borderRadius.forEach((radius, index) => {
-              const prama = pramas[index]
-              if (radius) {
-                bgCtx.arc(
-                  prama.l + prama.x * radius,
-                  prama.t + prama.y * radius,
-                  radius,
-                  prama.a,
-                  prama.a + Math.PI / 2
-                )
-              } else {
-                bgCtx.lineTo(prama.l, prama.t)
-              }
-            })
-            bgCtx.closePath()
-            bgCtx.clip()
-          }
+          const borderRadius = getMarginOrPadding(layout.styles['border-radius'])
+          bgCtx.beginPath()
+          const pramas = [
+            { l: 0, t: 0, x: 1, y: 1, a: -Math.PI },
+            { l: width, t: 0, x: -1, y: 1, a: -Math.PI / 2 },
+            { l: width, t: height, x: -1, y: -1, a: 0 },
+            { l: 0, t: height, x: 1, y: -1, a: Math.PI / 2 }
+          ]
+          borderRadius.forEach((radius, index) => {
+            const prama = pramas[index]
+            if (radius) {
+              bgCtx.arc(prama.l + prama.x * radius, prama.t + prama.y * radius, radius, prama.a, prama.a + Math.PI / 2)
+            } else {
+              bgCtx.lineTo(prama.l, prama.t)
+            }
+          })
+          bgCtx.closePath()
+          bgCtx.clip()
+        }
+        await parseBackgroundShorthand(bgCanvas, layout.styles.background, layout.rect)
+        if (bgCanvas && bgCanvas.width && bgCanvas.height) {
           ctx.drawImage(bgCanvas, parentLeft, parentTop, bgWidth, bgHeight)
           if (layout.styles.border) {
             // ???
@@ -427,9 +424,21 @@ export const drawItem = async (
       }
     }
     if (layout.content) {
-      ctx.font = `${layout.styles['font-style'] || ''} ${layout.styles['font-weight'] || ''} ${
-        layout.styles['font-size']
-      }px/${layout.styles['line-height']}px PingFangSC-Medium, "PingFang SC", sans-serif`
+      let fontWeight: 'normal' | 'bold' = 'normal'
+      if (layout.styles['font-size']) {
+        if (typeof layout.styles['font-size'] === 'string') {
+          if (layout.styles['font-size'] === 'bold') {
+            fontWeight = 'bold'
+          }
+        } else {
+          if (layout.styles['font-size'] > 500) {
+            fontWeight = 'bold'
+          }
+        }
+      }
+      ctx.font = `${layout.styles['font-style'] || ''} ${fontWeight} ${layout.styles['font-size']}px/${
+        layout.styles['line-height']
+      }px PingFangSC-Medium, "PingFang SC", sans-serif`.trim()
       ctx.fillStyle = layout.styles.color!
       const offsetX = {
         left: 0,
@@ -437,11 +446,11 @@ export const drawItem = async (
         right: layout.rect.boxWidth || 0
       }
       ctx.textAlign = layout.styles['text-align'] || 'left'
-      ctx.textBaseline = 'bottom'
-      const offsetY = -(layout.styles['line-height']! - layout.styles['font-size']!) / 2
-      if (layout.textLines) {
+      ctx.textBaseline = 'middle'
+      const offsetY = -layout.styles['line-height']! / 2
+      if (layout.rect.textLines) {
         // ctx.strokeRect(parentLeft + layout.rect.padding[3], parentTop + layout.rect.padding[0], layout.rect.boxWidth, layout.styles['line-height'])
-        let lines = [...layout.textLines]
+        let lines = [...layout.rect.textLines]
         if (layout.styles['line-clamp']) {
           const clamp = layout.styles['line-clamp']
           if (lines.length > clamp) {
@@ -452,7 +461,7 @@ export const drawItem = async (
         lines.forEach((e, i) => {
           ctx.fillText(
             e,
-            parentLeft + layout.rect.padding[3] + offsetX[ctx.textAlign as keyof typeof offsetX] || 0,
+            parentLeft + layout.rect.padding[3] + offsetX[layout.styles['text-align'] || 'left'] || 0,
             parentTop + layout.rect.padding[0] + (i + 1) * layout.styles['line-height']! + offsetY,
             layout.rect.boxWidth
           )
@@ -461,7 +470,7 @@ export const drawItem = async (
         // ctx.strokeRect(parentLeft + layout.rect.padding[3], parentTop + layout.rect.padding[0], layout.rect.boxWidth, layout.styles['line-height'])
         ctx.fillText(
           layout.content,
-          parentLeft + layout.rect.padding[3] + offsetX[ctx.textAlign as keyof typeof offsetX] || 0,
+          parentLeft + layout.rect.padding[3] + offsetX[layout.styles['text-align'] || 'left'] || 0,
           parentTop + layout.rect.padding[0] + layout.styles['line-height']! + offsetY,
           layout.rect.boxWidth
         )
@@ -564,10 +573,10 @@ export const drawItem = async (
     }
   }
   if (layout.rect.transform) {
-    const originX = layout.rect.transformOrigin.xPrecent
+    const originX = layout.rect.transformOrigin.xPercent
       ? (layout.rect.boxWidth! * layout.rect.transformOrigin.x) / 100
       : layout.rect.transformOrigin.x
-    const originY = layout.rect.transformOrigin.yPrecent
+    const originY = layout.rect.transformOrigin.yPercent
       ? (layout.rect.boxHeight! * layout.rect.transformOrigin.y) / 100
       : layout.rect.transformOrigin.y
     const transform = layout.rect.transform

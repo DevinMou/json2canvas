@@ -1,5 +1,5 @@
 import { ComputedLayout } from '..'
-import { getRealValue } from '../util/common'
+import { AstFn, getRealValue } from '../util/common'
 import { PickRequried } from '../util/type'
 
 export const parseFlex = (flexStr: string) => {
@@ -46,8 +46,8 @@ interface FlexItemBaseProp {
   margin: number
   flexGrow: number
   flexShrink: number
-  precentLength: number
-  originPrecentLength: number
+  percentLength: AstFn['fn']
+  originPercentLength: AstFn['fn']
   fixedLength: number
   layout: ComputedLayout
 }
@@ -60,7 +60,7 @@ export const setFlexSizeLength = (
   ignorePadding?: boolean
 ) => {
   let flexLength = 0
-  const precentArr: PickRequried<FlexItemProp, 'precentLength'>[] = []
+  const percentArr: PickRequried<FlexItemProp, 'percentLength'>[] = []
   const fixedArr: PickRequried<FlexItemProp, 'fixedLength'>[] = []
   const flexArr: PickRequried<FlexItemProp, 'styleLength' | 'contentLength'>[] = []
   let paddingContentSum = 0
@@ -78,11 +78,11 @@ export const setFlexSizeLength = (
     if (e.margin) {
       marginSum += e.margin
     }
-    if (e.precentLength !== undefined) {
-      precentArr.push(e as (typeof precentArr)[0])
+    if (e.percentLength !== undefined) {
+      percentArr.push(e as (typeof percentArr)[0])
       if (isColumn && flexBoxInitLength === undefined) {
-        e.originPrecentLength = e.precentLength
-        e.precentLength = 0
+        e.originPercentLength = e.percentLength
+        e.percentLength = undefined
       }
     } else if (e.styleLength === undefined && e.contentLength) {
       if (e.overflow) {
@@ -103,7 +103,7 @@ export const setFlexSizeLength = (
   const computeRestRoomLength = () => {
     flexBoxLength = flexBoxInitLength || flexLength
     restRoomLength =
-      precentArr.map(e => e.precentLength * flexBoxLength).reduce((a, b) => a + b, 0) +
+      percentArr.map(e => e.percentLength(flexBoxLength)).reduce((a, b) => a + b, 0) +
       fixedArr.map(e => e.fixedLength).reduce((a, b) => a + b, 0) +
       flexArr.map(e => e.styleLength || e.contentLength).reduce((a, b) => a + b, 0) +
       paddingContentSum +
@@ -111,8 +111,8 @@ export const setFlexSizeLength = (
       flexBoxLength
     if (restRoomLength > 0) {
       shrinkLength = [
-        ...precentArr.map(
-          e => (e.precentLength * flexBoxLength - (e.borderBox && e.padding ? e.padding : 0)) * e.flexShrink
+        ...percentArr.map(
+          e => (e.percentLength(flexBoxLength) - (e.borderBox && e.padding ? e.padding : 0)) * e.flexShrink
         ),
         ...flexArr.map(
           e => ((e.styleLength || e.contentLength) - (e.borderBox && e.padding ? e.padding : 0)) * e.flexShrink
@@ -126,8 +126,8 @@ export const setFlexSizeLength = (
     // grow
     const growSum = arr.map(e => e.flexGrow).reduce((a, b) => a + b, 0)
     ;[
-      ...precentArr.map(e => {
-        e.sizeLength = e.precentLength * flexBoxLength
+      ...percentArr.map(e => {
+        e.sizeLength = e.percentLength(flexBoxLength)
         return e
       }),
       ...flexArr.map(e => {
@@ -147,8 +147,8 @@ export const setFlexSizeLength = (
       let tempLength = 0
       arr.forEach(item => {
         const flexItemLength =
-          (item.precentLength !== undefined
-            ? item.precentLength * flexBoxLength
+          (item.percentLength !== undefined
+            ? item.percentLength(flexBoxLength)
             : item.styleLength || item.contentLength!) +
           (item.borderBox ? 0 : item.padding || 0) +
           (item.margin || 0)
@@ -192,12 +192,12 @@ export const setFlexSizeLength = (
           _flexArr.length = 0
           continue
         }
-        const precentArrLength = precentArr.length
-        precentArr.splice(
+        const percentArrLength = percentArr.length
+        percentArr.splice(
           0,
-          precentArr.length,
-          ...precentArr.filter(e => {
-            const item = e.precentLength! * flexBoxLength
+          percentArr.length,
+          ...percentArr.filter(e => {
+            const item = e.percentLength!(flexBoxLength)
             const padding = e.borderBox ? e.padding || 0 : 0
             const maxItem = Math.max(item, padding)
             e.sizeLength = item - (((maxItem - padding) * e.flexShrink) / shrinkLength) * restRoomLength
@@ -210,7 +210,7 @@ export const setFlexSizeLength = (
             }
           })
         )
-        if (precentArrLength !== precentArr.length) {
+        if (percentArrLength !== percentArr.length) {
           continue
         }
         fixedArr.forEach(e => {

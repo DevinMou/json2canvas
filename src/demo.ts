@@ -1,5 +1,5 @@
 import { draw, initWindow, DrawLayout, SampleCanvasType, SampleImageType } from './json2canvas'
-import { parseBackgroundShorthand } from './json2canvas/lib/background'
+import { parseStr2Ast } from './json2canvas/util/common'
 const layout: DrawLayout = {
   type: 'view',
   styles: {
@@ -15,14 +15,15 @@ const layout: DrawLayout = {
     {
       type: 'view',
       styles: {
-        width: '55%',
+        width: 'calc(55% + 100px)',
+        // width: '55%',
         height: '100px',
         background:
-          'url(https://image.brightfuture360.com/static/temple/merit-box/btn-1.png) no-repeat center top calc(-15% + 10px)/cover,linear-gradient(135deg, red, orange 10%, yellow, green, blue 31%,40%,purple 50%,black calc(100% - 20px), #fff) repeat bottom 10px right/calc(100% - min(1%, 5px)) calc(50% - 10px) content-box border-box,#ff0000',
+          'url("https://image.brightfuture360.com/static/temple/merit-box/btn-1.png") no-repeat center top calc(-15% + 10px)/cover,linear-gradient(135deg, red, orange 10%, yellow, green, blue 31%,40%,purple 50%,black calc(100% - 20px), #fff) repeat bottom 10px right/calc(100% - min(1%, 5px)) calc(calc(50% / 2) - calc(10px + 5px)) content-box border-box,#ff0000',
         flex: '1 2 auto',
         'box-sizing': 'content-box',
-        display: 'inline-block',
-        padding: '20px'
+        display: 'inline-block'
+        // padding: '20px calc(5% + 20px)'
       }
     },
     {
@@ -79,6 +80,7 @@ const layout: DrawLayout = {
         width: '100px',
         height: '100px',
         background: 'blue',
+        'border-radius': '25px',
         flex: '0 2 auto',
         padding: '0 20px',
         // 'box-sizing': 'border-box',
@@ -114,21 +116,166 @@ const layout: DrawLayout = {
     }
   ]
 }
+const layout2: DrawLayout = {
+  type: 'view',
+  content: '',
+  styles: {
+    width: '750rpx',
+    'border-radius': '15rpx',
+    'transform-origin': 'left top',
+    transform: 'scale(0.5)',
+    overflow: 'hidden',
+    position: 'relative',
+    background:
+      'url(https://image.brightfuture360.com/static/temple/practice-together/canvas/background-0-0.png) no-repeat top/contain,url(https://image.brightfuture360.com/static/temple/practice-together/canvas/background-0-1.png) no-repeat bottom/contain,#f3c992'
+  },
+  children: [
+    {
+      type: 'img',
+      content: 'https://image.brightfuture360.com/static/temple/practice-together/canvas/title-dktj.png',
+      styles: {
+        display: 'block',
+        width: '288rpx',
+        height: '77rpx',
+        'object-fit': 'contain',
+        margin: '77rpx auto 0'
+      }
+    },
+    {
+      type: 'view',
+      content: '2023-03-24',
+      styles: {
+        width: '212rpx',
+        height: '50rpx',
+        'border-radius': '25rpx',
+        background: 'rgba(207, 146, 83, 0.8)',
+        margin: '19rpx auto 0',
+        'font-size': '25rpx',
+        'font-weight': 500,
+        color: '#fff7cf',
+        'line-height': '50rpx',
+        'text-align': 'center'
+      }
+    },
+    {
+      type: 'view',
+      content: '',
+      styles: {
+        margin: '38rpx auto 0',
+        width: '673rpx',
+        padding: '56rpx 0',
+        'box-sizing': 'border-box',
+        background:
+          'url(https://image.brightfuture360.com/static/temple/practice-together/canvas/box-0-0.png) no-repeat top/contain,url(https://image.brightfuture360.com/static/temple/practice-together/canvas/box-0-1.png) repeat-y center/contain content-box,url(https://image.brightfuture360.com/static/temple/practice-together/canvas/box-0-2.png) no-repeat bottom/contain'
+      },
+      children: [
+        {
+          type: 'view',
+          content: `收到大家发心恭送：
+
+
+          我是谁101遍
+          你是哪个200遍
+          他又是谁啊321遍
+          
+          共同虔诚回向：呕拎油共修打卡详细数量统计（遍）：
+          
+          统计日期：2023-06-5`,
+          styles: {
+            'white-space': 'pre-line',
+            padding: '0 58rpx',
+            'font-size': '31rpx',
+            'font-weight': 500,
+            'line-height': '50rpx',
+            color: '#222220'
+          }
+        }
+      ]
+    },
+    {
+      type: 'view',
+      content: '大德寺共修打卡',
+      styles: {
+        'font-size': '35rpx',
+        'font-weight': 500,
+        color: '#4d2607',
+        'line-height': '48rpx',
+        margin: '58rpx 0 0 50rpx'
+      }
+    },
+    {
+      type: 'view',
+      content: '扫码加入小组，一起共修打卡',
+      styles: {
+        'font-size': '25rpx',
+        'font-weight': 400,
+        color: '#7d3d0a',
+        'line-height': '35rpx',
+        margin: '15rpx 0 91rpx 50rpx'
+      }
+    },
+    {
+      type: 'view',
+      content: '',
+      styles: {
+        position: 'absolute',
+        right: '50rpx',
+        bottom: '71rpx',
+        width: '138rpx',
+        height: '138rpx',
+        background: '#ffffff',
+        'border-radius': '8rpx'
+      }
+    },
+    {
+      type: 'img',
+      content: 'https://image.brightfuture360.com/static/temple/practice-together/share/img-qrcode.png',
+      styles: {
+        position: 'absolute',
+        width: '115rpx',
+        height: '115rpx',
+        bottom: '82rpx',
+        right: '62rpx',
+        'object-fit': 'contain'
+      }
+    }
+  ]
+}
 window.onload = () => {
-  const h = (l: DrawLayout): string => {
-    const _children = l.children ? l.children.map(e => h(e)).join('') : ''
+  console.log(
+    246,
+    parseStr2Ast(
+      'url("https://image.brightf\'utur\'e360.com/static/temple/merit-box/btn-1.png") no-repeat  center top calc(-15% + 10px)/cover,linear-gradient(135deg, red, orange 10%, yellow, green, blue 31%,40%,purple 50%,black calc(100% - 20px), #fff) repeat bottom 10px right/calc(100% - min(1%, 5px)) calc(calc(50% / 2) - calc(10px + 5px)) content-box border-box,#ff0000'
+    )
+  )
+
+  const h = (l: DrawLayout): HTMLDivElement | HTMLImageElement => {
+    const _children = l.children ? l.children.map(e => h(e)) : l.type === 'view' && l.content ? l.content : ''
     const tag = l.type === 'view' ? 'div' : 'img'
-    return `<${tag} style="${Object.entries(l.styles)
+    const el = document.createElement(tag)
+    el.style.cssText = Object.entries(l.styles)
       .map(e => `${e[0]}:${e[1]}`)
-      .join(';')}">${_children}</${tag}>`
+      .join(';')
+      .replace(/rpx/g, 'px')
+    if (tag === 'img' && l.content) {
+      el.setAttribute('src', l.content)
+    }
+    if (_children) {
+      if (Array.isArray(_children)) {
+        _children.forEach(e => el.appendChild(e))
+      } else {
+        el.textContent = _children
+      }
+    }
+    return el
   }
   const demoDom = document.getElementById('demo_dom')
   const demoCanvas = document.getElementById('demo_canvas') as HTMLCanvasElement
-  demoDom!.innerHTML = h(layout)
+  demoDom!.appendChild(h(layout))
   initWindow({
     dpr: window.devicePixelRatio,
     // dpr: 1,
-    createCanvas(isOffScreen: boolean, width?, height?) {
+    createCanvas(isOffScreen: boolean, width = 1, height = 1) {
       if (isOffScreen && OffscreenCanvas) {
         const dpr = this.dpr || 1
         const offCanvas = new OffscreenCanvas(
@@ -144,8 +291,8 @@ window.onload = () => {
     createImage: () => new Image() as SampleImageType
   })
   draw(layout).then(res => {
-    const { canvas, width, height } = res! || {}
-    console.log(137, canvas, width, height)
+    const { canvas, width, height, layout } = res! || {}
+    console.log(137, canvas, width, height, layout)
     if (demoCanvas) {
       const canvasEl = demoCanvas
       canvasEl.width = width

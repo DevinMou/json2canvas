@@ -1,7 +1,7 @@
 import { DrawStyles, windowInfo } from '..'
 import { NOS, SpecifiedLengthTuple } from './type'
 
-export const precentStrReg = /^([+-]?[\d.]+)%$/
+export const percentStrReg = /^([+-]?[\d.]+)%$/
 export const lengthReg = /^((?:[+-])?[\d\.]+)([a-zA-Z%]+)?$/
 export const colorKeyWordRGB: { [k: string]: SpecifiedLengthTuple<number, 3> } = {
   aliceblue: [240, 248, 255],
@@ -146,26 +146,37 @@ export const colorKeyWordRGB: { [k: string]: SpecifiedLengthTuple<number, 3> } =
   yellow: [255, 255, 0],
   yellowgreen: [154, 205, 50]
 }
-export const parseLengthStr = (str: NOS, unit = 'px') => {
+
+export class LengthParseObj {
+  source: NOS = ''
+  value = 0
+  unit = ''
+  constructor(params?: Partial<LengthParseObj>) {
+    Object.assign(this, params)
+  }
+  compute() {
+    if (!this.unit) {
+      return this.value
+    } else {
+      return this
+    }
+  }
+}
+
+export const parseLengthStr = (str: NOS, unit = '') => {
+  const res = new LengthParseObj()
+  res.source = str
   if (typeof str === 'string') {
     const m = lengthReg.exec(str)
     if (m !== null) {
-      return {
-        value: +m[1],
-        unit: m[2]
-      }
-    } else {
-      return {
-        value: 0,
-        unit: ''
-      }
+      res.value = +m[1]
+      res.unit = m[2]
     }
   } else {
-    return {
-      value: str,
-      unit
-    }
+    res.value = str
+    res.unit = unit
   }
+  return res
 }
 export const getLengthValue = (lengthStr: NOS | ReturnType<typeof parseLengthStr>, parentLength: number = 0) => {
   const { value, unit } = typeof lengthStr === 'object' ? lengthStr : parseLengthStr(lengthStr)
@@ -207,7 +218,7 @@ export const isAngleStr = (str: string) => {
 export const getMarginOrPadding = (str?: NOS): number[] => {
   let matchNum: number[] = [0, 0, 0, 0]
   if (typeof str === 'string') {
-    const reg = /\b(?:([\d.]+)([a-zA-Z]+)?)|auto\b/g
+    const reg = /\b(?:([+-]?[\d.]+)([a-zA-Z]+)?)|auto\b/g
     const matches = str.match(reg)
     if (matches) {
       const len = matches.length
@@ -371,3 +382,299 @@ export const compareObject = (objA: any, objB: any) => {
 }
 
 export const isNonNullable = <T>(val: T): val is NonNullable<T> => val !== null && val !== undefined
+
+export class AstItem {
+  type: string = ''
+  value: string = ''
+  children?: AstItem[]
+  parentSign?: AstItem
+  constructor(params: Partial<AstItem>) {
+    Object.assign(this, params)
+  }
+}
+
+export const parseStr2Ast = (str: string) => {
+  const rootSign = new AstItem({
+    type: 'root',
+    value: '',
+    children: []
+  })
+  let currentSign = rootSign
+  const end_judge: {
+    reg: RegExp
+    fn?: () => void
+  }[] = []
+  let temp = ''
+  let pureStr = false
+  const appendWord = () => {
+    if (temp) {
+      currentSign.children?.push(
+        new AstItem({
+          type: 'word',
+          value: temp,
+          children: []
+        })
+      )
+      temp = ''
+    }
+  }
+  const index = {
+    value: 0
+  }
+  for (; index.value < str.length; index.value++) {
+    const chart = str.charAt(index.value)
+    if (pureStr) {
+      if (chart === (currentSign.type === 'string1' ? "'" : '"')) {
+        currentSign.value = temp
+        currentSign = currentSign.parentSign!
+        temp = ''
+        pureStr = false
+      } else {
+        temp += chart
+      }
+    } else {
+      if (end_judge[0] && end_judge[0].reg.test(chart)) {
+        if (end_judge[0].fn) {
+          end_judge[0].fn()
+        } else if (temp) {
+          currentSign.value = temp
+          temp = ''
+        }
+        end_judge.shift()
+      } else {
+        switch (chart) {
+          case '(':
+            currentSign = new AstItem({
+              type: 'function',
+              value: temp,
+              children: [],
+              parentSign: currentSign
+            })
+            temp = ''
+            currentSign.parentSign?.children?.push(currentSign)
+            end_judge.unshift({
+              reg: /\)/,
+              fn: () => {
+                appendWord()
+                if (currentSign.parentSign) {
+                  currentSign = currentSign.parentSign
+                }
+              }
+            })
+            break
+          case ' ':
+            if (/^\s+$/.test(temp)) {
+              temp += chart
+            } else {
+              appendWord()
+              temp += chart
+              currentSign = new AstItem({
+                type: 'space',
+                value: '',
+                parentSign: currentSign
+              })
+              currentSign.parentSign?.children?.push(currentSign)
+              end_judge.unshift({
+                reg: /\S/,
+                fn: () => {
+                  currentSign.value = temp
+                  temp = ''
+                  index.value--
+                  if (currentSign.parentSign) {
+                    currentSign = currentSign.parentSign
+                  }
+                }
+              })
+            }
+            break
+          case "'":
+            appendWord()
+            currentSign = new AstItem({
+              type: 'string1',
+              value: '',
+              parentSign: currentSign
+            })
+            currentSign.parentSign?.children?.push(currentSign)
+            pureStr = true
+            break
+          case '"':
+            appendWord()
+            currentSign = new AstItem({
+              type: 'string2',
+              value: '',
+              parentSign: currentSign
+            })
+            currentSign.parentSign?.children?.push(currentSign)
+            pureStr = true
+            break
+          case '/':
+            appendWord()
+            currentSign.children?.push(
+              new AstItem({
+                type: '/',
+                value: '',
+                parentSign: currentSign
+              })
+            )
+            break
+          case ',':
+            appendWord()
+            currentSign.children?.push(
+              new AstItem({
+                type: ',',
+                value: '',
+                parentSign: currentSign
+              })
+            )
+            break
+          default:
+            temp += chart
+        }
+      }
+    }
+  }
+  appendWord()
+  return rootSign
+}
+
+export class AstFn {
+  type: string = ''
+  params: (string | AstFn | LengthParseObj)[] = []
+  _params?: (AstFn | LengthParseObj)[] = []
+  parent?: AstFn
+  fn?: <T = number>(length: number) => T
+  constructor(params: Partial<AstFn>) {
+    Object.assign(this, params)
+  }
+}
+
+export const parseAstItem2AstFnAndStr = (ast: AstItem, parent?: AstFn) => {
+  if (ast.type.startsWith('string')) {
+    return ast.value
+  } else if (ast.type === 'word') {
+    return ast.value
+  } else if (ast.type === 'function') {
+    const match_fn: AstFn = new AstFn({
+      type: ast.value,
+      params: [],
+      parent
+    })
+    match_fn.params = ast
+      .children!.filter(item => item.type !== 'space')
+      .map(e => parseAstItem2AstFnAndStr(e, match_fn))
+    return match_fn
+  } else {
+    return ast.type
+  }
+}
+
+export const parseFnParams = (fnItem: AstFn): AstFn | LengthParseObj => {
+  let _params: (AstFn | LengthParseObj)[] = []
+  const execFn = (e: (typeof _params)[number], length: number) =>
+    e instanceof AstFn ? e.fn!(length) : getLengthValue(e, length)
+  fnItem.params = fnItem.params.map(item => (item instanceof AstFn ? parseFnParams(item) : item))
+  switch (fnItem.type) {
+    case 'calc':
+      if (fnItem.params.length === 3) {
+        if (typeof fnItem.params[1] === 'string' && /\+|-|\*|\//.test(fnItem.params[1])) {
+          const vals = [fnItem.params[0], fnItem.params[2]]
+          if (!vals.find(e => typeof e === 'string' && !lengthReg.test(e))) {
+            const parsedVals = vals.map(e => (typeof e === 'string' ? parseLengthStr(e) : e))
+            if (parsedVals[0] instanceof LengthParseObj && parsedVals[1] instanceof LengthParseObj) {
+              if (/\+|-/.test(fnItem.params[1]) && parsedVals[0].unit === parsedVals[1].unit) {
+                return new LengthParseObj({
+                  value: parsedVals[0].value + (fnItem.params[1] === '-' ? -1 : 1) * parsedVals[1].value,
+                  unit: parsedVals[0].unit
+                })
+              } else if (/\*|\//.test(fnItem.params[1]) && !parsedVals[1].unit) {
+                if (fnItem.params[1] === '*' || parsedVals[1].value) {
+                  return new LengthParseObj({
+                    value:
+                      fnItem.params[1] === '*'
+                        ? parsedVals[0].value * parsedVals[1].value
+                        : parsedVals[0].value / parsedVals[1].value,
+                    unit: parsedVals[0].unit
+                  })
+                } else {
+                  // error
+                }
+              }
+            }
+            fnItem._params = parsedVals
+            fnItem.fn = <T = number>(length: number) => {
+              const vals = [fnItem._params![0], fnItem._params![1]].map(e => execFn(e, length)) as [number, number]
+              let res = 0
+              switch (fnItem.params[1]) {
+                case '+':
+                  res = vals[0] + vals[1]
+                  break
+                case '-':
+                  res = vals[0] - vals[1]
+                  break
+                case '*':
+                  res = vals[0] * vals[1]
+                  break
+                case '/':
+                  res = vals[1] ? vals[0] / vals[1] : 0
+                  break
+              }
+              return res as T
+            }
+          }
+        }
+      } else if (fnItem.params.length === 1) {
+        const _item = fnItem.params[0]
+        if (typeof _item === 'string' && lengthReg.test(_item)) {
+          return parseLengthStr(_item)
+        } else if (_item instanceof AstFn) {
+          return _item
+        }
+      }
+      break
+    case 'min':
+    case 'max':
+      fnItem.params = fnItem.params.filter(item => item !== ',')
+      if (fnItem.params.length === 2) {
+        if (!fnItem.params.find(e => typeof e === 'string' && !lengthReg.test(e))) {
+          _params = fnItem.params.map(e => (typeof e === 'string' ? parseLengthStr(e) : e))
+          if (_params[0] instanceof LengthParseObj && _params[1] instanceof LengthParseObj) {
+            if (_params[0].unit === _params[1].unit) {
+              return new LengthParseObj({
+                value:
+                  fnItem.type === 'min'
+                    ? Math.min(_params[0].value, _params[1].value)
+                    : Math.max(_params[0].value, _params[1].value),
+                unit: _params[0].unit
+              })
+            }
+          }
+          fnItem._params = _params
+          fnItem.fn = <T = number>(length: number) => {
+            const vals = fnItem._params!.map(e => +execFn(e, length))
+            return (fnItem.type === 'min' ? Math.min(...vals) : Math.max(...vals)) as T
+          }
+        }
+      }
+      break
+    case 'rgb':
+    case 'hsl':
+    case 'rgba':
+    case 'hsla':
+      fnItem.fn = <T = number[]>(length: number) => {
+        return fnItem.params
+          .filter(item => (item instanceof String ? ![',', '/'].includes(item) : true))
+          .map(item => (item instanceof AstFn ? item.fn!(length) : +item)) as T
+      }
+      break
+  }
+  return fnItem
+}
+
+export const getLengthFnPercentAndFixed = (fn: NonNullable<AstFn['fn']>) => {
+  const fixed = fn(0)
+  const percent = fn(1) - fixed
+  return {
+    fixed,
+    percent
+  }
+}

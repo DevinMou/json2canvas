@@ -3,7 +3,8 @@ import { parseStr2Ast } from './json2canvas/util/common'
 const layout: DrawLayout = {
   type: 'view',
   styles: {
-    display: 'inline-flex',
+    // display: 'inline-flex',
+    display: 'inline-block',
     background: 'pink',
     // 'flex-direction': 'column',
     'flex-wrap': 'nowrap',
@@ -21,12 +22,13 @@ const layout: DrawLayout = {
         background:
           'url("https://image.brightfuture360.com/static/temple/merit-box/btn-1.png") no-repeat center top calc(-15% + 10px)/cover,linear-gradient(135deg, red, orange 10%, yellow, green, blue 31%,40%,purple 50%,black calc(100% - 20px), #fff) repeat bottom 10px right/calc(100% - min(1%, 5px)) calc(calc(50% / 2) - calc(10px + 5px)) content-box border-box,#ff0000',
         flex: '1 2 auto',
-        'box-sizing': 'content-box',
-        display: 'inline-block'
-        // padding: '20px calc(5% + 20px)'
+        // 'box-sizing': 'content-box',
+        'box-sizing': 'border-box',
+        display: 'inline-block',
+        padding: '0 calc(5% + 20px)'
       }
     },
-    {
+    /* {
       type: 'view',
       styles: {
         width: 'auto',
@@ -61,7 +63,7 @@ const layout: DrawLayout = {
           }
         }
       ]
-    },
+    }, */
     {
       type: 'view',
       styles: {
@@ -71,10 +73,11 @@ const layout: DrawLayout = {
         flex: '0 1 auto',
         'box-sizing': 'content-box',
         display: 'inline-block',
-        margin: '0 0 30px 0'
+        margin: '0 0 30px 0',
+        padding: '0 min(5%, 20px)'
       }
     },
-    {
+    /* {
       type: 'view',
       styles: {
         width: '100px',
@@ -87,7 +90,7 @@ const layout: DrawLayout = {
         display: 'inline-block',
         'align-self': 'center'
       }
-    },
+    }, */
     {
       type: 'view',
       styles: {
@@ -98,7 +101,8 @@ const layout: DrawLayout = {
         'box-sizing': 'content-box',
         margin: '20px 0',
         display: 'block',
-        'align-self': 'center'
+        'align-self': 'center',
+        padding: '0 max(5%, 20px)'
       }
     },
     {

@@ -3,7 +3,6 @@ import {
   getRealValue,
   percentStrReg,
   getBorderArr,
-  getMarginOrPadding,
   getLengthValue,
   lengthReg,
   parseLengthStr,
@@ -203,8 +202,8 @@ const computeFlexRect = async (layout: ComputedLayout) => {
           const flexItem: FlexItemProp = {
             flexGrow: e.rect.flexGrow!,
             flexShrink: e.rect.flexShrink!,
-            padding: isColumn ? e.rect.paddingHeight + e.rect.borderHeight : e.rect.paddingWidth + e.rect.borderWidth,
-            margin: isColumn ? e.rect.marginHeight : e.rect.marginWidth,
+            // padding: isColumn ? e.rect.paddingHeight + e.rect.borderHeight : e.rect.paddingWidth + e.rect.borderWidth,
+            // margin: isColumn ? e.rect.marginHeight : e.rect.marginWidth,
             layout: e
           }
           if (e.styles.overflow === 'hidden' || e.styles.overflow === 'auto') {
@@ -415,7 +414,7 @@ type RectAndStyleType = {
   style: ReturnType<typeof coverStyles2RealValue>
 }
 
-const mergeSize = (layout: ComputedLayout, isHeight = false) => {
+const mergeSize = async (layout: ComputedLayout, isHeight = false) => {
   const dir = isHeight ? 'height' : 'width'
   const contentDir = isHeight ? 'contentHeight' : 'contentWidth'
 
@@ -440,7 +439,11 @@ const mergeSize = (layout: ComputedLayout, isHeight = false) => {
             () => item.rect.crossLength,
             crossLength => {
               if (crossLength !== undefined) {
-                setWidthOrHeightByStyle(item.rect, crossLength - item.rect[getDir(isHeight).margin], false, isHeight)
+                getMarginOrPaddingValuePromise(item.rect, [isHeight ? 'margin-height' : 'margin-width']).then(
+                  ([margin]) => {
+                    setWidthOrHeightByStyle(item.rect, crossLength - margin, false, isHeight)
+                  }
+                )
               }
             },
             { immediate: true }
@@ -474,9 +477,15 @@ const mergeSize = (layout: ComputedLayout, isHeight = false) => {
           return getRectsPropPromise(
             level.map(item => item.rect),
             _rect => _rect[contentDir]
-          ).then(() => {
+          ).then(async () => {
             const crossLength = Math.max(
-              ...level.map(item => item.rect[getDir(isHeight).box]! + item.rect[getDir(isHeight).margin])
+              ...(await Promise.all(
+                level.map(item =>
+                  getMarginOrPaddingValuePromise(item.rect, [isHeight ? 'margin-height' : 'margin-width']).then(
+                    ([margin]) => item.rect[getDir(isHeight).box]! + margin
+                  )
+                )
+              ))
             )
             crossLengthArr[index] = crossLength
             return crossLength
@@ -486,24 +495,21 @@ const mergeSize = (layout: ComputedLayout, isHeight = false) => {
         if (crossLengthArr.length === 1 && layout.rect[getDir(isHeight).content] !== undefined) {
           crossLengthArr[0] = layout.rect[getDir(isHeight).content]!
         }
-        positionChildren.forEach((item, index) => {
+        positionChildren.forEach(async (item, index) => {
           item.rect.crossLength = crossLengthArr[item.rect.crossIndex] || 0
           if (isHeight && !index) {
-            ReactCompute.watch(
+            await ReactCompute.watch(
               () => layout.rect.contentHeight,
-              contentHeight => {
-                if (contentHeight === undefined) {
-                  return
-                }
-                const rest = item.rect.crossLength! - item.rect.margin[0] - item.rect.boxHeight! - item.rect.margin[2]
-                layout.rect.flexBaseOutHeight =
-                  contentHeight -
-                  item.rect.boxHeight! -
-                  item.rect.marginHeight -
-                  (item.rect.alignSelf === 'center' ? rest / 2 : item.rect.alignSelf === 'flex-end' ? rest : 0)
-              },
+              _ => _ !== undefined,
               { immediate: true }
             )
+            const [marginHeight] = await getMarginOrPaddingValuePromise(item.rect, ['margin-height'])
+            const rest = item.rect.crossLength! - marginHeight - item.rect.boxHeight!
+            layout.rect.flexBaseOutHeight =
+              layout.rect.contentHeight! -
+              item.rect.boxHeight! -
+              marginHeight -
+              (item.rect.alignSelf === 'center' ? rest / 2 : item.rect.alignSelf === 'flex-end' ? rest : 0)
           }
         })
         if (isHeight) {
@@ -529,97 +535,115 @@ const mergeSize = (layout: ComputedLayout, isHeight = false) => {
         ['normal', undefined].includes(layout.styles['white-space'])
       ) {
         const relationChildren = layout.children!.filter(item => item.styles.position !== 'absolute')
-        getRectsPropPromise([layout.rect, ...relationChildren.map(e => e.rect)], _rect => _rect.contentWidth).then(
-          contentWidthArr => {
-            const parentWidth = contentWidthArr[0]
-            const childrenWidths = relationChildren.map(e => e.rect.boxWidth! + e.rect.marginWidth)
-            const levels: {
-              isLine: boolean
-              children: ComputedLayout[]
-              // height?: number
-            }[] = []
-            let tempWidth = 0
-            if (childrenWidths.length) {
-              levels.push({
-                isLine: false,
-                children: []
-              })
-            }
-            childrenWidths.forEach((_width, index) => {
-              const item = relationChildren[index]
-              const lastLevel = levels[levels.length - 1]
-              if (
-                tempWidth + _width > parentWidth ||
-                !item.rect.isInline ||
-                (lastLevel.children.length && lastLevel.isLine !== item.rect.isInline)
-              ) {
-                levels.push({
-                  isLine: false,
-                  children: []
-                })
-                tempWidth = _width
-              } else {
-                tempWidth += _width
-              }
-              const currentLevel = levels[levels.length - 1]
-              if (!currentLevel.children.length) {
-                currentLevel.isLine = item.rect.isInline
-              }
-              item.rect.crossIndex = levels.length - 1
-              currentLevel.children.push(item)
-            })
-            Promise.all(
-              levels.map(async level => {
-                await getRectsPropPromise(
-                  level.children.map(item => item.rect),
-                  _rect => _rect.boxHeight
-                )
-                let maxHeight = 0
-                let maxItem: ComputedLayout | null = null
-                const flexItemFixedHeights: number[] = [0]
-                level.children.forEach(item => {
-                  let _height = item.rect.boxHeight! + item.rect.marginHeight
-                  if (level.isLine && item.rect.isFlex) {
-                    const _fixedHeight = item.rect.flexBaseOutHeight + item.rect.margin[2]
-                    _height -= _fixedHeight
-                    flexItemFixedHeights.push(_fixedHeight)
-                  }
-                  if (_height >= maxHeight) {
-                    maxHeight = _height
-                    maxItem = item
-                  }
-                })
-                maxHeight += Math.max(...flexItemFixedHeights)
-                level.children.forEach(item => {
-                  item.rect.crossLength = maxHeight
-                })
-                return {
-                  isInline: level.isLine,
-                  maxHeight,
-                  maxItem: maxItem!
-                }
-              })
-            ).then(itemArr => {
-              let preMarginBottom: number | null = null
-              let tempHeight = 0
-              itemArr
-                .filter(item => item.maxItem)
-                .forEach(item => {
-                  const marginTop = item.maxItem.rect.margin[0]
-                  const marginBottom = item.maxItem.rect.margin[2]
-                  tempHeight +=
-                    item.maxHeight -
-                    (!item.maxItem.rect.isInline && preMarginBottom !== null ? Math.min(marginTop, preMarginBottom) : 0)
-                  if (item.maxItem.rect.isInline) {
-                    preMarginBottom = null
-                  } else {
-                    preMarginBottom = marginBottom
-                  }
-                })
-              setWidthOrHeightByStyle(layout.rect, tempHeight, false, true)
-            })
-          }
+        const contentWidthArr = await getRectsPropPromise(
+          [layout.rect, ...relationChildren.map(e => e.rect)],
+          _rect => _rect.contentWidth
         )
+        const childrenWidths = await Promise.all(
+          relationChildren.map(e =>
+            getMarginOrPaddingValuePromise(e.rect, ['margin-width']).then(
+              ([marginWidth]) => e.rect.boxWidth! + marginWidth
+            )
+          )
+        )
+        const parentWidth = contentWidthArr[0]
+        const levels: {
+          isLine: boolean
+          children: ComputedLayout[]
+          // height?: number
+        }[] = []
+        let tempWidth = 0
+        if (childrenWidths.length) {
+          levels.push({
+            isLine: false,
+            children: []
+          })
+        }
+        childrenWidths.forEach((_width, index) => {
+          const item = relationChildren[index]
+          const lastLevel = levels[levels.length - 1]
+          if (
+            tempWidth + _width > parentWidth ||
+            !item.rect.isInline ||
+            (lastLevel.children.length && lastLevel.isLine !== item.rect.isInline)
+          ) {
+            levels.push({
+              isLine: false,
+              children: []
+            })
+            tempWidth = _width
+          } else {
+            tempWidth += _width
+          }
+          const currentLevel = levels[levels.length - 1]
+          if (!currentLevel.children.length) {
+            currentLevel.isLine = item.rect.isInline
+          }
+          item.rect.crossIndex = levels.length - 1
+          currentLevel.children.push(item)
+        })
+        Promise.all(
+          levels.map(async level => {
+            await getRectsPropPromise(
+              level.children.map(item => item.rect),
+              _rect => _rect.boxHeight
+            )
+            let maxHeight = 0
+            let maxItem: ComputedLayout | null = null
+            const flexItemFixedHeights: number[] = [0]
+            await Promise.all(
+              level.children.map(item =>
+                getMarginOrPaddingValuePromise(item.rect, ['margin-height', 'margin-bottom']).then(
+                  ([marginHeight, marginBottom]) => {
+                    let _height = item.rect.boxHeight! + marginHeight
+                    if (level.isLine && item.rect.isFlex) {
+                      const _fixedHeight = item.rect.flexBaseOutHeight + marginBottom
+                      _height -= _fixedHeight
+                      flexItemFixedHeights.push(_fixedHeight)
+                    }
+                    if (_height >= maxHeight) {
+                      maxHeight = _height
+                      maxItem = item
+                    }
+                  }
+                )
+              )
+            )
+            maxHeight += Math.max(...flexItemFixedHeights)
+            level.children.forEach(item => {
+              item.rect.crossLength = maxHeight
+            })
+            return {
+              isInline: level.isLine,
+              maxHeight,
+              maxItem: maxItem!
+            }
+          })
+        ).then(async itemArr => {
+          let preMarginBottom: number | null = null
+          let tempHeight = 0
+          await Promise.all(
+            itemArr
+              .filter(item => item.maxItem)
+              .map(item =>
+                getMarginOrPaddingValuePromise(item.maxItem.rect, ['margin-top', 'margin-bottom']).then(
+                  ([marginTop, marginBottom]) => {
+                    tempHeight +=
+                      item.maxHeight -
+                      (!item.maxItem.rect.isInline && preMarginBottom !== null
+                        ? Math.min(marginTop, preMarginBottom)
+                        : 0)
+                    if (item.maxItem.rect.isInline) {
+                      preMarginBottom = null
+                    } else {
+                      preMarginBottom = marginBottom
+                    }
+                  }
+                )
+              )
+          )
+          setWidthOrHeightByStyle(layout.rect, tempHeight, false, true)
+        })
       } else {
         //
         console.log(952)
@@ -627,7 +651,7 @@ const mergeSize = (layout: ComputedLayout, isHeight = false) => {
     } else {
       if (layout.rect.isInline) {
         const relationChildren = layout.children!.filter(item => item.styles.position !== 'absolute')
-        getRectsPropPromise(
+        await getRectsPropPromise(
           relationChildren
             .filter(
               item =>
@@ -636,88 +660,95 @@ const mergeSize = (layout: ComputedLayout, isHeight = false) => {
             )
             .map(item => item.rect),
           _rect => _rect.contentWidth
-        ).then(() => {
-          const levels: {
-            widthBySelf: boolean
-            isInline: boolean
-            children: ComputedLayout[]
-          }[] = []
-          let lastIsInline = false
-          relationChildren.forEach(item => {
-            const widthBySelf = item.rect.percentFn.width === undefined
-            if (!item.rect.isInline || !lastIsInline) {
-              levels.push({
-                isInline: item.rect.isInline,
-                widthBySelf,
-                children: []
-              })
-            }
-            levels[levels.length - 1].children.push(item)
-            // item.rect.crossIndex = levels.length - 1
-            lastIsInline = item.rect.isInline
-          })
-          Promise.all(
-            levels.map(level =>
-              getRectsPropPromise(
-                level.children.map(item => item.rect),
-                _rect => _rect.boxHeight
-              ).then(() => {
-                let maxHeightItem: ComputedLayout | null = null
-                let maxHeight = 0
-                level.children.forEach(item => {
-                  const _height = item.rect.boxHeight! + item.rect.marginHeight
-                  if (_height >= maxHeight) {
-                    maxHeight = _height
-                    maxHeightItem = item
-                  }
-                })
-                return {
-                  isInline: level.isInline,
-                  maxHeightItem: maxHeightItem!,
-                  maxHeight
-                }
-              })
-            )
-          ).then(levelArr => {
-            let preMarginBottom: null | number = null
-            let tempHeight = 0
+        )
+        const levels: {
+          widthBySelf: boolean
+          isInline: boolean
+          children: ComputedLayout[]
+        }[] = []
+        let lastIsInline = false
+        relationChildren.forEach(item => {
+          const widthBySelf = item.rect.percentFn.width === undefined
+          if (!item.rect.isInline || !lastIsInline) {
+            levels.push({
+              isInline: item.rect.isInline,
+              widthBySelf,
+              children: []
+            })
+          }
+          levels[levels.length - 1].children.push(item)
+          // item.rect.crossIndex = levels.length - 1
+          lastIsInline = item.rect.isInline
+        })
+        Promise.all(
+          levels.map(level =>
+            getRectsPropPromise(
+              level.children.map(item => item.rect),
+              _rect => _rect.boxHeight
+            ).then(async () => {
+              let maxHeightItem: ComputedLayout | null = null
+              let maxHeight = 0
+              await Promise.all(
+                level.children.map(item =>
+                  getMarginOrPaddingValuePromise(item.rect, ['margin-height']).then(([marginHeight]) => {
+                    const _height = item.rect.boxHeight! + marginHeight
+                    if (_height >= maxHeight) {
+                      maxHeight = _height
+                      maxHeightItem = item
+                    }
+                  })
+                )
+              )
+              return {
+                isInline: level.isInline,
+                maxHeightItem: maxHeightItem!,
+                maxHeight
+              }
+            })
+          )
+        ).then(async levelArr => {
+          let preMarginBottom: null | number = null
+          let tempHeight = 0
+          await Promise.all(
             levelArr
               .filter(item => item && item.maxHeightItem)
-              .forEach(item => {
-                tempHeight += item.maxHeight
-                if (!item.isInline && preMarginBottom !== null) {
-                  tempHeight -= Math.min(preMarginBottom, item.maxHeightItem!.rect.margin[0])
-                }
-                if (item.isInline) {
-                  preMarginBottom = null
-                } else {
-                  preMarginBottom = item.maxHeightItem.rect.margin[2]
-                }
-              })
-            setWidthOrHeightByStyle(layout.rect, tempHeight, false, true)
-          })
-          const maxWidth = Math.max(
-            ...levels
-              // .filter(item => item.widthBySelf)
-              .map(({ children: level }) =>
-                level
-                  .map(item =>
-                    item.rect.percentFn.width === undefined
-                      ? item.rect.boxWidth! + item.rect.marginWidth
-                      : item.styles['box-sizing'] === 'border-box'
-                      ? item.rect.marginWidth
-                      : item.rect.paddingWidth + item.rect.marginWidth
-                  )
-                  .reduce((a, b) => a + b, 0)
+              .map(item =>
+                getMarginOrPaddingValuePromise(item.maxHeightItem.rect, ['margin-top', 'margin-bottom']).then(
+                  ([marginTop, marginBottom]) => {
+                    tempHeight += item.maxHeight
+                    if (!item.isInline && preMarginBottom !== null) {
+                      tempHeight -= Math.min(preMarginBottom, marginTop)
+                    }
+                    if (item.isInline) {
+                      preMarginBottom = null
+                    } else {
+                      preMarginBottom = marginBottom
+                    }
+                  }
+                )
               )
           )
-          /* let _crossIndex = 0
-          let _levelLength = 0
-          levels.forEach(level => {
-
-          }) */
-          setWidthOrHeightByStyle(layout.rect, maxWidth, false)
+          setWidthOrHeightByStyle(layout.rect, tempHeight, false, true)
         })
+        const maxWidth = Math.max(
+          ...(await Promise.all(
+            levels.map(({ children: level }) =>
+              Promise.all(
+                level.map(item =>
+                  getMarginOrPaddingValuePromise(item.rect, ['margin-width', 'padding-width']).then(
+                    ([marginWidth, paddingWidth]) =>
+                      item.rect.percentFn.width === undefined
+                        ? item.rect.boxWidth! + marginWidth
+                        : item.styles['box-sizing'] === 'border-box'
+                        ? marginWidth
+                        : paddingWidth + marginWidth
+                  )
+                )
+              ).then(res => res.reduce((a, b) => a + b, 0))
+            )
+          ))
+        )
+        setWidthOrHeightByStyle(layout.rect, maxWidth, false)
       } else {
         //
       }
@@ -774,6 +805,160 @@ const mergeRect = (layout: ComputedLayout) => {
     //
   }
 }
+const RegularMarginOrPadding = (val?: ReturnType<typeof parseCssValue>, allowedNegative = false) => {
+  if (!val) {
+    return [0, 0, 0, 0]
+  }
+  const getRegularAstFn = (astFn: AstFn): LengthParseObj | AstFn => {
+    if (astFn.type === 'min') {
+      return new LengthParseObj({
+        value: 0
+      })
+    } else if (astFn.type === 'max') {
+      const fixedParam = astFn._params?.find(e => (e instanceof LengthParseObj ? e.unit !== '%' : false))
+      if (fixedParam) {
+        return fixedParam
+      }
+    }
+    return Object.assign({}, astFn, {
+      _params: astFn._params?.map(item => (item instanceof AstFn ? getRegularAstFn(item) : item))
+    })
+  }
+  const _val = val.map(item => {
+    if (item instanceof LengthParseObj) {
+      return item.unit === '%'
+        ? item.value
+          ? {
+              fn: <T = number>(length: number) => ((item.value * length) / 100) as T,
+              flexLength: 0
+            }
+          : 0
+        : getLengthValue(item)
+    } else if (item instanceof AstFn) {
+      const regItem = getRegularAstFn(item)
+      return {
+        fn: item.fn,
+        flexLength: regItem instanceof LengthParseObj ? getLengthValue(regItem, 0) : regItem.fn!(0)
+      }
+    } else {
+      return item
+    }
+  })
+  const res: typeof _val = []
+  switch (_val.length) {
+    case 1:
+      res.push(_val[0], _val[0], _val[0], _val[0])
+      break
+    case 2:
+      res.push(_val[0], _val[1], _val[0], _val[1])
+      break
+    case 3:
+      res.push(_val[0], _val[1], _val[2], _val[1])
+      break
+    case 4:
+      res.push(..._val)
+      break
+  }
+  if (res.length) {
+    return res.map(item => {
+      if (allowedNegative) {
+        return item
+      } else {
+        if (typeof item === 'number') {
+          if (item < 0) {
+            return 0
+          } else {
+            return item
+          }
+        } else if (item instanceof Object) {
+          if (item.flexLength < 0) {
+            item.flexLength = 0
+          }
+          return item
+        } else {
+          return item
+        }
+      }
+    })
+  } else {
+    return [0, 0, 0, 0]
+  }
+}
+type MorP = 'margin' | 'padding'
+type MarginOrPaddingDir = 'left' | 'top' | 'right' | 'bottom' | 'width' | 'height'
+export type MorPDir = `${MorP}-${MarginOrPaddingDir}`
+
+export const getMarginOrPaddingValuePromise = async (rect: LayoutRect, params: MorPDir[]) => {
+  return await Promise.all(
+    params.map(async dir => {
+      const [prop, kword] = dir.split('-') as [MorP, MarginOrPaddingDir]
+      const values = rect[prop] as unknown as ReturnType<typeof RegularMarginOrPadding>
+      if (values) {
+        const res: NonNullable<ReturnType<typeof RegularMarginOrPadding>> = []
+        switch (kword) {
+          case 'top':
+            res.push(values[0])
+            break
+          case 'right':
+            res.push(values[1])
+            break
+          case 'bottom':
+            res.push(values[2])
+            break
+          case 'left':
+            res.push(values[3])
+            break
+          case 'width':
+            res.push(values[1], values[3])
+            break
+          case 'height':
+            res.push(values[0], values[2])
+            break
+        }
+        if (
+          res.find(item => (item instanceof LengthParseObj ? item.unit === '%' && item.value : item instanceof Object))
+        ) {
+          if (rect.parentRect && rect.parentRect.contentWidth) {
+            await ReactCompute.watch(
+              () => rect.parentRect.contentWidth,
+              _ => _ !== undefined,
+              { immediate: true }
+            )
+            return res
+              .map(item => {
+                if (item instanceof LengthParseObj) {
+                  return getLengthValue(item, rect.parentRect.contentWidth!)
+                } else if (item instanceof Object) {
+                  return item.fn!(rect.parentRect.contentWidth!)
+                } else if (typeof item === 'number') {
+                  return item
+                } else {
+                  return 0
+                }
+              })
+              .reduce((a, b) => a + b, 0)
+          } else {
+            return 0
+          }
+        } else {
+          return res
+            .map(item => {
+              if (item instanceof LengthParseObj) {
+                return getLengthValue(item)
+              } else if (typeof item === 'number') {
+                return item
+              } else {
+                return 0
+              }
+            })
+            .reduce((a, b) => a + b, 0)
+        }
+      } else {
+        return 0
+      }
+    })
+  )
+}
 
 const initRectAndStyle = (layout: DrawLayout, parentRAT?: RectAndStyleType) => {
   // @1:初始化rect,设置固定/响应宽高
@@ -788,9 +973,9 @@ const initRectAndStyle = (layout: DrawLayout, parentRAT?: RectAndStyleType) => {
   }
   const border = getBorderArr(styles)
   const borderLength = border.map(e => (e ? e[0] : 0))
-  const margin = getMarginOrPadding(style.margin)
+  const margin = RegularMarginOrPadding(styleSplits.margin, true)
   const marginCenterAuto = /^\S+\s+auto(\s+\S+(\s+auto)?)?$/.test(styles.margin?.toString() || '')
-  const padding = getMarginOrPadding(style.padding)
+  const padding = RegularMarginOrPadding(styleSplits.padding)
   const transformOrigin = parseOrigin(style['transform-origin'])
   const transform = parseTransformStr(style.transform)
   const rect = ReactCompute.reactive({
@@ -830,10 +1015,10 @@ const initRectAndStyle = (layout: DrawLayout, parentRAT?: RectAndStyleType) => {
     margin,
     marginCenterAuto,
     padding,
-    paddingWidth: padding[1] + padding[3],
-    paddingHeight: padding[0] + padding[2],
-    marginWidth: margin[1] + margin[3],
-    marginHeight: margin[0] + margin[2],
+    // paddingWidth: padding[1] + padding[3],
+    // paddingHeight: padding[0] + padding[2],
+    // marginWidth: margin[1] + margin[3],
+    // marginHeight: margin[0] + margin[2],
     parentRect: undefined,
     parentStyle: undefined,
     styleSplits,
@@ -842,8 +1027,6 @@ const initRectAndStyle = (layout: DrawLayout, parentRAT?: RectAndStyleType) => {
     number,
     {
       flexBasis: NOS
-      margin: number[]
-      padding: number[]
       border: number[]
       percentFn: {
         width?: AstFn
@@ -921,9 +1104,10 @@ const initRectAndStyle = (layout: DrawLayout, parentRAT?: RectAndStyleType) => {
     }
   }
   if (
-    ['auto', undefined].includes(widthObj) &&
-    (['block', 'flex', undefined].includes(style.display) ||
-      (rect.isFlexItem && rect.parentRect.flexIsColumn && rect.alignSelf === 'stretch'))
+    rect.percentFn.width ||
+    (['auto', undefined].includes(widthObj) &&
+      (['block', 'flex', undefined].includes(style.display) ||
+        (rect.isFlexItem && rect.parentRect.flexIsColumn && rect.alignSelf === 'stretch')))
   ) {
     if (rect.parentRect && (rect.isFlexItem ? rect.parentRect.flexIsColumn : true)) {
       ReactCompute.watch(
@@ -934,7 +1118,9 @@ const initRectAndStyle = (layout: DrawLayout, parentRAT?: RectAndStyleType) => {
               const tempWidth = rect.percentFn.width!.fn!(contentWidth)
               setWidthOrHeightByStyle(rect, tempWidth, isBorderBox)
             } else {
-              setWidthOrHeightByStyle(rect, contentWidth - rect.marginWidth, true)
+              getMarginOrPaddingValuePromise(rect, ['margin-width']).then(([marginWidth]) =>
+                setWidthOrHeightByStyle(rect, contentWidth - marginWidth, true)
+              )
             }
           }
         },
@@ -984,6 +1170,7 @@ const initRectAndStyle = (layout: DrawLayout, parentRAT?: RectAndStyleType) => {
     }
   } */
   const heightObj = styleSplits.height ? styleSplits.height[0] : undefined
+  let hasHeight = false
   if (heightObj) {
     if (heightObj instanceof LengthParseObj) {
       if (heightObj.unit === '%') {
@@ -995,8 +1182,10 @@ const initRectAndStyle = (layout: DrawLayout, parentRAT?: RectAndStyleType) => {
       } else {
         setWidthOrHeightByStyle(rect, getLengthValue(heightObj), isBorderBox, true)
       }
+      hasHeight = true
     } else if (heightObj instanceof AstFn) {
       rect.percentFn.height = heightObj
+      hasHeight = true
     }
   }
   if (
@@ -1014,7 +1203,9 @@ const initRectAndStyle = (layout: DrawLayout, parentRAT?: RectAndStyleType) => {
               const tempHeight = rect.percentFn.height!.fn!(contentHeight)
               setWidthOrHeightByStyle(rect, tempHeight, isBorderBox, true)
             } else {
-              setWidthOrHeightByStyle(rect, contentHeight - rect.marginWidth, true, true)
+              getMarginOrPaddingValuePromise(rect, ['margin-width']).then(([marginWidth]) =>
+                setWidthOrHeightByStyle(rect, contentHeight - marginWidth, true, true)
+              )
             }
           }
         },
@@ -1022,8 +1213,9 @@ const initRectAndStyle = (layout: DrawLayout, parentRAT?: RectAndStyleType) => {
           immediate: true
         }
       )
+      hasHeight = true
     }
-  } else if (!heightObj && (!layout.children || !layout.children.length)) {
+  } else if (!hasHeight && (!layout.children || !layout.children.length)) {
     setWidthOrHeightByStyle(rect, 0, false, true)
   }
   /* if (typeof style.height === 'number') {

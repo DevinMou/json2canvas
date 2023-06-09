@@ -215,7 +215,7 @@ export const isAngleStr = (str: string) => {
   }
 }
 
-export const getMarginOrPadding = (str?: NOS): number[] => {
+export const getBorderRadius = (str?: NOS): number[] => {
   let matchNum: number[] = [0, 0, 0, 0]
   if (typeof str === 'string') {
     const reg = /\b(?:([+-]?[\d.]+)([a-zA-Z]+)?)|auto\b/g

@@ -3,8 +3,9 @@
 
 import { drawItem } from './lib/draw'
 import { setFlexSizeLength } from './lib/flex'
-import { getLayoutPosition } from './lib/position'
-import { LayoutRect, LayoutStyle, parseLayout } from './lib/rect'
+import { getLayoutPosition, getMarginOrPaddingValue } from './lib/position'
+import { LayoutRect, LayoutStyle, parseLayout, getMarginOrPaddingValuePromise } from './lib/rect'
+import { ReactCompute } from './util/react_compute'
 import { PickRequried, NOS } from './util/type'
 
 /*
@@ -92,27 +93,30 @@ export interface DrawLayout {
 }
 
 export const setWidthOrHeightByStyle = (rect: LayoutRect, length: number, isBorderBox: boolean, isHeight = false) => {
-  const boxDir = isHeight ? 'boxHeight' : 'boxWidth'
-  const paddingDir = isHeight ? 'paddingHeight' : 'paddingWidth'
-  const borderDir = isHeight ? 'borderHeight' : 'borderWidth'
-  const contentDir = isHeight ? 'contentHeight' : 'contentWidth'
+  const dir = getDir(isHeight)
+  const padding = getMarginOrPaddingValue(rect, isHeight ? 'padding-height' : 'padding-width')
   if (isBorderBox) {
-    rect[boxDir] = length
-    rect[contentDir] = rect[boxDir]! - rect[paddingDir] - rect[borderDir]
+    rect[dir.box] = length
+    rect[dir.content] = rect[dir.box]! - padding - rect[dir.border]
   } else {
-    rect[contentDir] = length
-    rect[boxDir] = rect[contentDir]! + rect[paddingDir] + rect[borderDir]
+    rect[dir.content] = length
+    rect[dir.box] = rect[dir.content]! + padding + rect[dir.border]
   }
 }
 
 export const getFlexLayout = (...args: Parameters<typeof setFlexSizeLength>) => {
   const { flexBoxLength, children } = setFlexSizeLength(...args)
+  if (children.length && children[0].layout.rect.parentRect) {
+    ReactCompute.watch(
+      () => children[0].layout.rect.parentRect.contentWidth,
+      _ => _ !== undefined
+    ).then(() => {
+      children.forEach(e => setWidthOrHeightByStyle(e.layout.rect, e.sizeLength!, !!e.borderBox, args[2]))
+    })
+  }
   return {
     flexBoxLength,
-    children: children.map(e => {
-      setWidthOrHeightByStyle(e.layout.rect, e.sizeLength!, !!e.borderBox, args[2])
-      return e
-    })
+    children
   }
 }
 
@@ -184,8 +188,8 @@ export const draw = async (layout: DrawLayout) => {
     const computedLayout = parseLayout(layout)
     await new Promise<void>(resolve => setTimeout(resolve, 0))
     const layoutRect = getLayoutPosition(computedLayout)
-    const rootWidth = (layoutRect.rect.boxWidth || 0) + layoutRect.rect.padding[1] + layoutRect.rect.padding[3]
-    const rootHeight = layoutRect.rect.boxHeight! + layoutRect.rect.padding[2] + layoutRect.rect.padding[0]
+    const rootWidth = getMarginOrPaddingValue(layoutRect.rect, 'padding-width') + (layoutRect.rect.boxWidth || 0)
+    const rootHeight = getMarginOrPaddingValue(layoutRect.rect, 'padding-height') + layoutRect.rect.boxHeight!
     const canvas = windowInfo.createCanvas!(true, rootWidth * windowInfo.dpr, rootHeight * windowInfo.dpr)
     const ctx = canvas.getContext('2d')
     ctx.scale(windowInfo.dpr, windowInfo.dpr)

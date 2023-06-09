@@ -1,6 +1,7 @@
 import { ComputedLayout } from '..'
 import { AstFn, getRealValue } from '../util/common'
 import { PickRequried } from '../util/type'
+import { LayoutRect } from './rect'
 
 export const parseFlex = (flexStr: string) => {
   let grow = 0
@@ -42,8 +43,8 @@ interface FlexItemBaseProp {
   contentLength: number
   borderBox: boolean
   overflow: boolean
-  padding: number
-  margin: number
+  // padding: number
+  // margin: number
   flexGrow: number
   flexShrink: number
   percentLength: AstFn['fn']
@@ -63,20 +64,33 @@ export const setFlexSizeLength = (
   const percentArr: PickRequried<FlexItemProp, 'percentLength'>[] = []
   const fixedArr: PickRequried<FlexItemProp, 'fixedLength'>[] = []
   const flexArr: PickRequried<FlexItemProp, 'styleLength' | 'contentLength'>[] = []
-  let paddingContentSum = 0
-  let paddingBorderSum = 0
-  let marginSum = 0
+  const paddingContentArr: LayoutRect[] = []
+  const marginArr: LayoutRect[] = []
+  let paddingFixedSum = 0
+  let marginFixedSum = 0
+  // let paddingBorderSum = 0
+  const getMarginOrPadding = (rect: LayoutRect, mp: 'margin' | 'padding', isFixed = false) => {
+    const arr = rect[mp]!
+    const group = isColumn ? [arr[0], arr[2]] : [arr[1], arr[3]]
+    return group.reduce<number>(
+      (a, b) =>
+        a + (typeof b === 'number' ? b : b instanceof Object ? (isFixed ? b.flexLength : b.fn!(flexBoxLength)) : 0),
+      0
+    )
+  }
   arr.forEach(e => {
     // e = { ...e }
-    if (e.padding) {
-      if (e.borderBox) {
-        paddingBorderSum += e.padding
-      } else {
-        paddingContentSum += e.padding
+    if (e.layout.rect) {
+      if (e.layout.styles.padding) {
+        paddingFixedSum += getMarginOrPadding(e.layout.rect, 'padding', true)
+        if (!e.borderBox) {
+          paddingContentArr.push(e.layout.rect)
+        }
       }
-    }
-    if (e.margin) {
-      marginSum += e.margin
+      if (e.layout.styles.margin) {
+        marginArr.push(e.layout.rect)
+        marginFixedSum += getMarginOrPadding(e.layout.rect, 'margin', true)
+      }
     }
     if (e.percentLength !== undefined) {
       percentArr.push(e as (typeof percentArr)[0])
@@ -97,7 +111,10 @@ export const setFlexSizeLength = (
       flexLength += e.styleLength
     }
   })
-  flexLength += paddingContentSum + marginSum
+  flexLength += paddingFixedSum + marginFixedSum
+  let flexBoxLength = flexBoxInitLength || flexLength
+  const paddingContentSum = paddingContentArr.map(e => getMarginOrPadding(e, 'padding')).reduce((a, b) => a + b, 0)
+  const marginSum = marginArr.map(e => getMarginOrPadding(e, 'margin')).reduce((a, b) => a + b, 0)
   let restRoomLength = 0
   let shrinkLength = 0
   const computeRestRoomLength = () => {
@@ -112,15 +129,19 @@ export const setFlexSizeLength = (
     if (restRoomLength > 0) {
       shrinkLength = [
         ...percentArr.map(
-          e => (e.percentLength(flexBoxLength) - (e.borderBox && e.padding ? e.padding : 0)) * e.flexShrink
+          e =>
+            (e.percentLength(flexBoxLength) - ((e.borderBox && getMarginOrPadding(e.layout.rect, 'padding')) || 0)) *
+            e.flexShrink
         ),
         ...flexArr.map(
-          e => ((e.styleLength || e.contentLength) - (e.borderBox && e.padding ? e.padding : 0)) * e.flexShrink
+          e =>
+            ((e.styleLength || e.contentLength) -
+              ((e.borderBox && getMarginOrPadding(e.layout.rect, 'padding')) || 0)) *
+            e.flexShrink
         )
       ].reduce((a, b) => a + b, 0)
     }
   }
-  let flexBoxLength = flexBoxInitLength || flexLength
   computeRestRoomLength()
   if (restRoomLength <= 0) {
     // grow
@@ -150,8 +171,8 @@ export const setFlexSizeLength = (
           (item.percentLength !== undefined
             ? item.percentLength(flexBoxLength)
             : item.styleLength || item.contentLength!) +
-          (item.borderBox ? 0 : item.padding || 0) +
-          (item.margin || 0)
+          ((!item.borderBox && getMarginOrPadding(item.layout.rect, 'padding')) || 0) +
+          (getMarginOrPadding(item.layout.rect, 'margin') || 0)
         if (flexItemLength + tempLength > flexBoxLength) {
           tempLength = 0
           groups.push([])
@@ -173,11 +194,12 @@ export const setFlexSizeLength = (
         }
         flexArr.forEach(e => {
           const item = e.styleLength || e.contentLength || 0
-          const padding = e.borderBox ? e.padding || 0 : 0
+          const padding = e.borderBox ? getMarginOrPadding(e.layout.rect, 'padding') || 0 : 0
           const maxItem = Math.max(item, padding)
           e.sizeLength = item - (((maxItem - padding) * e.flexShrink) / shrinkLength) * restRoomLength
-          if (e.borderBox && e.padding && e.sizeLength < e.padding) {
-            e.fixedLength = e.padding
+          const _padding = getMarginOrPadding(e.layout.rect, 'padding')
+          if (e.borderBox && _padding && e.sizeLength < _padding) {
+            e.fixedLength = _padding
             fixedArr.push(e as (typeof fixedArr)[0])
           } else if (!e.overflow && e.contentLength && e.contentLength > e.sizeLength) {
             e.fixedLength =
@@ -198,11 +220,12 @@ export const setFlexSizeLength = (
           percentArr.length,
           ...percentArr.filter(e => {
             const item = e.percentLength!(flexBoxLength)
-            const padding = e.borderBox ? e.padding || 0 : 0
+            const _padding = getMarginOrPadding(e.layout.rect, 'padding')
+            const padding = e.borderBox ? _padding || 0 : 0
             const maxItem = Math.max(item, padding)
             e.sizeLength = item - (((maxItem - padding) * e.flexShrink) / shrinkLength) * restRoomLength
-            if (e.borderBox && e.padding && e.sizeLength < e.padding) {
-              e.fixedLength = e.padding
+            if (e.borderBox && _padding && e.sizeLength < _padding) {
+              e.fixedLength = _padding
               fixedArr.push(e as (typeof fixedArr)[0])
               return false
             } else {

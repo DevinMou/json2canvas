@@ -1,8 +1,9 @@
 import { ComputedLayout, windowInfo } from '..'
-import { getBorderOption, getMarginOrPadding, parseLengthStr, percentStrReg } from '../util/common'
+import { getBorderOption, getBorderRadius, parseLengthStr, percentStrReg } from '../util/common'
 import { MT } from '../util/sample_matrix'
 import { NOS, SpecifiedLengthTuple } from '../util/type'
 import { parseBackgroundShorthand } from './background'
+import { getMarginOrPaddingValue } from './position'
 
 type TransformType =
   | {
@@ -246,7 +247,7 @@ export const drawItem = async (
           const width = bgWidth
           const height = bgHeight
 
-          const borderRadius = getMarginOrPadding(layout.styles['border-radius'])
+          const borderRadius = getBorderRadius(layout.styles['border-radius'])
           bgCtx.beginPath()
           const pramas = [
             { l: 0, t: 0, x: 1, y: 1, a: -Math.PI },
@@ -354,7 +355,7 @@ export const drawItem = async (
           const width = bgWidth
           const height = bgHeight
 
-          const borderRadius = getMarginOrPadding(layout.styles['border-radius'])
+          const borderRadius = getBorderRadius(layout.styles['border-radius'])
           bgCtx.beginPath()
           const pramas = [
             { l: 0, t: 0, x: 1, y: 1, a: -Math.PI },
@@ -387,8 +388,8 @@ export const drawItem = async (
           }
         }
         /* if (layout.styles['border-radius']) {
-          const width = (layout.rect.boxWidth || 0) + layout.rect.padding[1] + layout.rect.padding[3]
-          const height = layout.rect.boxHeight! + layout.rect.padding[0] + layout.rect.padding[2]
+          const width = (layout.rect.boxWidth || 0) + getMarginOrPaddingValue(layout.rect, 'padding-right') + getMarginOrPaddingValue(layout.rect, 'padding-left')
+          const height = layout.rect.boxHeight! + getMarginOrPaddingValue(layout.rect, 'padding-top') + getMarginOrPaddingValue(layout.rect, 'padding-bottom')
 
           const borderRadius = getMarginOrPadding(layout.styles['border-radius'])
           ctx.beginPath()
@@ -449,7 +450,7 @@ export const drawItem = async (
       ctx.textBaseline = 'middle'
       const offsetY = -layout.styles['line-height']! / 2
       if (layout.rect.textLines) {
-        // ctx.strokeRect(parentLeft + layout.rect.padding[3], parentTop + layout.rect.padding[0], layout.rect.boxWidth, layout.styles['line-height'])
+        // ctx.strokeRect(parentLeft + getMarginOrPaddingValue(layout.rect, 'padding-left'), parentTop + getMarginOrPaddingValue(layout.rect, 'padding-top'), layout.rect.boxWidth, layout.styles['line-height'])
         let lines = [...layout.rect.textLines]
         if (layout.styles['line-clamp']) {
           const clamp = layout.styles['line-clamp']
@@ -461,24 +462,37 @@ export const drawItem = async (
         lines.forEach((e, i) => {
           ctx.fillText(
             e,
-            parentLeft + layout.rect.padding[3] + offsetX[layout.styles['text-align'] || 'left'] || 0,
-            parentTop + layout.rect.padding[0] + (i + 1) * layout.styles['line-height']! + offsetY,
+            parentLeft +
+              getMarginOrPaddingValue(layout.rect, 'padding-left') +
+              offsetX[layout.styles['text-align'] || 'left'] || 0,
+            parentTop +
+              getMarginOrPaddingValue(layout.rect, 'padding-top') +
+              (i + 1) * layout.styles['line-height']! +
+              offsetY,
             layout.rect.boxWidth
           )
         })
       } else {
-        // ctx.strokeRect(parentLeft + layout.rect.padding[3], parentTop + layout.rect.padding[0], layout.rect.boxWidth, layout.styles['line-height'])
+        // ctx.strokeRect(parentLeft + getMarginOrPaddingValue(layout.rect, 'padding-left'), parentTop + getMarginOrPaddingValue(layout.rect, 'padding-top'), layout.rect.boxWidth, layout.styles['line-height'])
         ctx.fillText(
           layout.content,
-          parentLeft + layout.rect.padding[3] + offsetX[layout.styles['text-align'] || 'left'] || 0,
-          parentTop + layout.rect.padding[0] + layout.styles['line-height']! + offsetY,
+          parentLeft +
+            getMarginOrPaddingValue(layout.rect, 'padding-left') +
+            offsetX[layout.styles['text-align'] || 'left'] || 0,
+          parentTop + getMarginOrPaddingValue(layout.rect, 'padding-top') + layout.styles['line-height']! + offsetY,
           layout.rect.boxWidth
         )
       }
     }
   } else if (layout.type === 'img' && layout.content) {
-    const bgWidth = (layout.rect.boxWidth || 0) + layout.rect.padding[1] + layout.rect.padding[3]
-    const bgHeight = layout.rect.boxHeight! + layout.rect.padding[2] + layout.rect.padding[0]
+    const bgWidth =
+      (layout.rect.boxWidth || 0) +
+      getMarginOrPaddingValue(layout.rect, 'padding-right') +
+      getMarginOrPaddingValue(layout.rect, 'padding-left')
+    const bgHeight =
+      layout.rect.boxHeight! +
+      getMarginOrPaddingValue(layout.rect, 'padding-bottom') +
+      getMarginOrPaddingValue(layout.rect, 'padding-top')
     const bgCanvas = windowInfo.createCanvas!(true, bgWidth * windowInfo.dpr, bgHeight * windowInfo.dpr)
     const bgCtx = bgCanvas.getContext('2d')
     bgCtx.scale(windowInfo.dpr, windowInfo.dpr)
@@ -487,7 +501,7 @@ export const drawItem = async (
       const width = bgWidth
       const height = bgHeight
 
-      const borderRadius = getMarginOrPadding(layout.styles['border-radius'])
+      const borderRadius = getBorderRadius(layout.styles['border-radius'])
       bgCtx.beginPath()
       const pramas = [
         { l: 0, t: 0, x: 1, y: 1, a: -Math.PI },
@@ -537,8 +551,14 @@ export const drawItem = async (
     ctx.drawImage(bgCanvas, parentLeft, parentTop, bgWidth, bgHeight)
   }
   if (layout.children && layout.children.length) {
-    const contentWidth = (layout.rect.boxWidth || 0) + layout.rect.padding[1] + layout.rect.padding[3]
-    const contentHeight = layout.rect.boxHeight! + layout.rect.padding[0] + layout.rect.padding[2]
+    const contentWidth =
+      (layout.rect.boxWidth || 0) +
+      getMarginOrPaddingValue(layout.rect, 'padding-right') +
+      getMarginOrPaddingValue(layout.rect, 'padding-left')
+    const contentHeight =
+      layout.rect.boxHeight! +
+      getMarginOrPaddingValue(layout.rect, 'padding-top') +
+      getMarginOrPaddingValue(layout.rect, 'padding-bottom')
     const normalChildren: ComputedLayout[] = []
     const transformChildren: ComputedLayout[] = []
     const zIndexChildren: ComputedLayout[] = []
@@ -562,11 +582,19 @@ export const drawItem = async (
       if (item.styles.position === 'absolute') {
         item.rect.left =
           item.rect.left === undefined
-            ? contentWidth - item.rect.right! - item.rect.boxWidth! - item.rect.padding[1] - item.rect.padding[3]
+            ? contentWidth -
+              item.rect.right! -
+              item.rect.boxWidth! -
+              getMarginOrPaddingValue(item.rect, 'padding-right') -
+              getMarginOrPaddingValue(item.rect, 'padding-left')
             : item.rect.left
         item.rect.top =
           item.rect.top === undefined
-            ? contentHeight - item.rect.bottom! - item.rect.boxHeight! - item.rect.padding[0] - item.rect.padding[2]
+            ? contentHeight -
+              item.rect.bottom! -
+              item.rect.boxHeight! -
+              getMarginOrPaddingValue(item.rect, 'padding-top') -
+              getMarginOrPaddingValue(item.rect, 'padding-bottom')
             : item.rect.top
       }
       await drawItem(canvas, ctx, item, parentLeft, parentTop)

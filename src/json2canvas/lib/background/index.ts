@@ -18,6 +18,7 @@ import {
   parseFnParams
 } from '../../util/common'
 import { ReactCompute } from '../../util/react_compute'
+import { getMarginOrPaddingValue } from '../position'
 
 export const parseBackgroundShorthand = async (bgCanvas: SampleCanvas.Canvas, background: string, rect: LayoutRect) => {
   // bstr = 'url(https://xxx.xxx.xxx) no-repeat top/contain,linear-gradient(90deg, rgba(220,0,123,0.6), #fce5bd 80%, #fce1b6) no-repeat bottom/750px 200px,#ff0000'
@@ -226,30 +227,33 @@ export const parseBackgroundShorthand = async (bgCanvas: SampleCanvas.Canvas, ba
           backgroundItem.origin === 'content-box'
             ? rect.contentWidth!
             : backgroundItem.origin === 'padding-box'
-            ? rect.contentWidth! + rect.paddingWidth
+            ? rect.contentWidth! + getMarginOrPaddingValue(rect, 'padding-width')
             : rect.boxWidth!
         backgroundRect.origin.height =
           backgroundItem.origin === 'content-box'
             ? rect.contentHeight!
             : backgroundItem.origin === 'padding-box'
-            ? rect.contentHeight! + rect.paddingHeight
+            ? rect.contentHeight! + getMarginOrPaddingValue(rect, 'padding-height')
             : rect.boxHeight!
         backgroundRect.clip.width =
           backgroundItem.clip === 'content-box'
             ? rect.contentWidth!
             : backgroundItem.clip === 'padding-box'
-            ? rect.contentWidth! + rect.paddingWidth
+            ? rect.contentWidth! + getMarginOrPaddingValue(rect, 'padding-width')
             : rect.boxWidth!
         backgroundRect.clip.height =
           backgroundItem.clip === 'content-box'
             ? rect.contentHeight!
             : backgroundItem.clip === 'padding-box'
-            ? rect.contentHeight! + rect.paddingHeight
+            ? rect.contentHeight! + getMarginOrPaddingValue(rect, 'padding-height')
             : rect.boxHeight!
         const marginDist = {
           'border-box': [0, 0],
           'padding-box': [rect.border[3], rect.border[0]],
-          'content-box': [rect.padding[3] + rect.border[3], rect.padding[0] + rect.border[0]]
+          'content-box': [
+            getMarginOrPaddingValue(rect, 'padding-left') + rect.border[3],
+            getMarginOrPaddingValue(rect, 'padding-top') + rect.border[0]
+          ]
         } as const
         backgroundRect.origin.left = marginDist[backgroundItem.origin!][0] - marginDist[backgroundItem.clip!][0]
         backgroundRect.origin.top = marginDist[backgroundItem.origin!][1] - marginDist[backgroundItem.clip!][1]

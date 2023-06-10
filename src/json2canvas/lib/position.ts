@@ -1,4 +1,5 @@
 import { ComputedLayout, getDir } from '..'
+import { computeAstFnParam } from '../util/common'
 import { LayoutRect, MorPDir } from './rect'
 
 const positionKeys = ['top', 'left', 'right', 'bottom'] as const
@@ -24,10 +25,15 @@ export const getMarginOrPaddingValue = (rect: LayoutRect, dir: MorPDir) => {
       return arr[0] + arr[2]
   }
 }
-
-export const getLayoutPosition = (layout: ComputedLayout) => {
+interface MoveLayoutItem {
+  source: LayoutRect
+  destination: LayoutRect
+}
+export const getLayoutPosition = (layout: ComputedLayout, moveList?: MoveLayoutItem[]) => {
   const layoutPaddingLeft = getMarginOrPaddingValue(layout.rect, 'padding-left')
   const layoutPaddingTop = getMarginOrPaddingValue(layout.rect, 'padding-top')
+  const isRoot = !moveList
+  moveList = moveList || []
   // let preMarginBottom: null | number = null
   if (layout.children) {
     const position = {
@@ -75,38 +81,7 @@ export const getLayoutPosition = (layout: ComputedLayout) => {
     layout.children.forEach(item => {
       const marginTop = getMarginOrPaddingValue(item.rect, 'margin-top')
       // const marginBottom = item.rect.margin[2]
-      if (item.styles.position === 'absolute') {
-        for (const k in item.styles) {
-          if (positionKeys.includes(k)) {
-            switch (k as PositionKey) {
-              case 'top':
-                item.rect.top = item.styles.top! + getMarginOrPaddingValue(item.rect, 'margin-top')
-                break
-              case 'bottom':
-                item.rect.top =
-                  layout.rect.boxHeight! -
-                  item.rect.boxHeight! -
-                  (item.styles.bottom! + getMarginOrPaddingValue(item.rect, 'margin-bottom'))
-                break
-              case 'left':
-                item.rect.left = item.styles.left! + getMarginOrPaddingValue(item.rect, 'margin-left')
-                break
-              case 'right':
-                item.rect.left =
-                  layout.rect.boxWidth! -
-                  item.rect.boxWidth! -
-                  (item.styles.right! + getMarginOrPaddingValue(item.rect, 'margin-right'))
-                break
-            }
-          }
-        }
-        if (item.rect.left === undefined) {
-          item.rect.left = getMarginOrPaddingValue(layout.rect, 'padding-left')
-        }
-        if (item.rect.top === undefined) {
-          item.rect.top = getMarginOrPaddingValue(layout.rect, 'padding-top')
-        }
-      } else if (layout.rect.isFlex) {
+      if (layout.rect.isFlex) {
         const newLine = item.rect.crossIndex !== tempCrossIndex
         const mainFixedItem = flexMainFixedArr[item.rect.crossIndex]
         if (newLine) {
@@ -192,44 +167,134 @@ export const getLayoutPosition = (layout: ComputedLayout) => {
           }
         }
       } else {
-        const newLine =
-          item.rect.crossIndex !== tempCrossIndex ||
-          position.left + tempMainLength + getMarginOrPaddingValue(item.rect, 'margin-width') + item.rect.boxWidth! >
-            layout.rect.contentWidth!
-        if (newLine) {
-          tempCrossIndex = item.rect.crossIndex
-          position.top += tempCrossLength
-          tempCrossLength = Math.max(
-            item.rect.crossLength || 0,
-            item.rect.boxHeight! + getMarginOrPaddingValue(item.rect, 'margin-height')
-          )
-          position.left = layoutPaddingLeft
-          tempMainLength = 0
+        if (item.styles.position === 'absolute') {
+          const newLine = !item.rect.isInline
+          const absolutePosition: Record<string, number | undefined> = {
+            x: undefined,
+            y: undefined
+          }
+
+          const positonParent = {
+            rect: item.rect.parentRect,
+            preRect: item.rect,
+            left: 0,
+            top: 0
+          }
+          while (
+            positonParent.rect.parentRect &&
+            (positonParent.rect.styleSplits.position ? positonParent.rect.styleSplits.position[0] === 'static' : true)
+          ) {
+            positonParent.left += positonParent.rect.left || 0
+            positonParent.top += positonParent.rect.top || 0
+            positonParent.preRect = positonParent.rect
+            positonParent.rect = positonParent.rect.parentRect
+          }
+          if (item.rect.styleSplits.bottom) {
+            absolutePosition.y =
+              positonParent.rect.boxHeight! -
+              item.rect.boxHeight! -
+              (computeAstFnParam(item.rect.styleSplits.bottom![0], positonParent.rect.boxHeight) +
+                getMarginOrPaddingValue(item.rect, 'margin-bottom'))
+          }
+          if (item.rect.styleSplits.top) {
+            absolutePosition.y =
+              computeAstFnParam(item.rect.styleSplits.top![0], positonParent.rect.boxHeight) +
+              getMarginOrPaddingValue(item.rect, 'margin-top')
+          }
+          if (item.rect.styleSplits.right) {
+            absolutePosition.x =
+              positonParent.rect.boxWidth! -
+              item.rect.boxWidth! -
+              (computeAstFnParam(item.rect.styleSplits.right![0], positonParent.rect.boxWidth) +
+                getMarginOrPaddingValue(item.rect, 'margin-right'))
+          }
+          if (item.rect.styleSplits.left) {
+            absolutePosition.x =
+              computeAstFnParam(item.rect.styleSplits.left![0], positonParent.rect.boxWidth) +
+              getMarginOrPaddingValue(item.rect, 'margin-left')
+          }
+
+          //
+          let tempTop = 0
+          let tempLeft = 0
+          if (newLine) {
+            tempTop = tempCrossLength
+            tempLeft = layoutPaddingLeft - position.left
+          } else {
+            tempLeft = tempMainLength
+          }
+          if (absolutePosition.y === undefined) {
+            item.rect.top =
+              positonParent.top +
+              position.top +
+              tempTop +
+              marginTop +
+              (item.rect.isFlex && item.rect.isInline ? item.rect.crossLength! - item.rect.boxHeight! : 0)
+          } else {
+            item.rect.top = absolutePosition.y
+          }
+
+          if (absolutePosition.x === undefined) {
+            item.rect.left =
+              positonParent.left + position.left + tempLeft + getMarginOrPaddingValue(item.rect, 'margin-left')
+          } else {
+            item.rect.left = absolutePosition.x
+          }
+          if (item.rect.parentRect !== positonParent.rect) {
+            moveList!.push({
+              source: item.rect,
+              destination: positonParent.preRect
+            })
+          }
         } else {
-          position.left += tempMainLength
-          tempCrossLength = Math.max(
-            tempCrossLength,
-            item.rect.boxHeight! + getMarginOrPaddingValue(item.rect, 'margin-height')
-          )
+          const newLine =
+            item.rect.crossIndex !== tempCrossIndex ||
+            position.left + tempMainLength + getMarginOrPaddingValue(item.rect, 'margin-width') + item.rect.boxWidth! >
+              layout.rect.contentWidth!
+          if (newLine) {
+            tempCrossIndex = item.rect.crossIndex
+            position.top += tempCrossLength
+            tempCrossLength = Math.max(
+              item.rect.crossLength || 0,
+              item.rect.boxHeight! + getMarginOrPaddingValue(item.rect, 'margin-height')
+            )
+            position.left = layoutPaddingLeft
+            tempMainLength = 0
+          } else {
+            position.left += tempMainLength
+            tempCrossLength = Math.max(
+              tempCrossLength,
+              item.rect.boxHeight! + getMarginOrPaddingValue(item.rect, 'margin-height')
+            )
+          }
+          item.rect.top =
+            position.top +
+            marginTop +
+            (item.rect.isFlex && item.rect.isInline ? item.rect.crossLength! - item.rect.boxHeight! : 0)
+          if (
+            (item.type === 'img'
+              ? item.styles.display === 'block'
+              : [undefined, 'block'].includes(item.styles.display)) &&
+            item.rect.marginCenterAuto
+          ) {
+            item.rect.left = position.left + (layout.rect.contentWidth! - item.rect.boxWidth!) / 2
+          } else {
+            item.rect.left = position.left + getMarginOrPaddingValue(item.rect, 'margin-left')
+          }
+          tempMainLength = getMarginOrPaddingValue(item.rect, 'margin-left') + item.rect.boxWidth!
         }
-        item.rect.top =
-          position.top +
-          marginTop +
-          (item.rect.isFlex && item.rect.isInline ? item.rect.crossLength! - item.rect.boxHeight! : 0)
-        if (
-          (item.type === 'img'
-            ? item.styles.display === 'block'
-            : [undefined, 'block'].includes(item.styles.display)) &&
-          item.rect.marginCenterAuto
-        ) {
-          item.rect.left = position.left + (layout.rect.contentWidth! - item.rect.boxWidth!) / 2
-        } else {
-          item.rect.left = position.left + getMarginOrPaddingValue(item.rect, 'margin-left')
-        }
-        tempMainLength = getMarginOrPaddingValue(item.rect, 'margin-left') + item.rect.boxWidth!
       }
-      getLayoutPosition(item)
+      getLayoutPosition(item, moveList)
     })
+  }
+  if (isRoot && moveList.length) {
+    moveList.forEach(item => {
+      const _index = item.source.parentLayout!.children?.findIndex(e => e.rect === item.source)
+      if (_index !== undefined && _index > -1) {
+        item.destination.parentLayout!.children!.push(item.source.parentLayout!.children!.splice(_index, 1)[0])
+      }
+    })
+    moveList.length = 0
   }
   return layout
 }

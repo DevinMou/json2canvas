@@ -10,10 +10,10 @@ const checkChangePaths = () => {
   console.log(10, changePaths.length)
   if (changePaths.length) {
     const item = changePaths.shift()
+    replacedPaths.push(item)
     replacing = true
     spawn('node', ['dist/replace_path.js', '--path', item]).stdout.on('close', () => {
       replacing = false
-      replacedPaths.push(item)
       checkChangePaths()
     })
   }

@@ -185,6 +185,8 @@ export const getLengthValue = (lengthStr: NOS | ReturnType<typeof parseLengthStr
     res = (value * parentLength) / 100
   } else if (unit in windowInfo.unit) {
     res = value * windowInfo.unit[unit]
+  } else if (!unit) {
+    res = value
   }
   return res
 }
@@ -676,5 +678,21 @@ export const getLengthFnPercentAndFixed = (fn: NonNullable<AstFn['fn']>) => {
   return {
     fixed,
     percent
+  }
+}
+
+export const computeAstFnParam = (item: AstFn['params'][number] | undefined, length = 0, defaultVal = 0) => {
+  let _item: typeof item | undefined
+  if (item instanceof AstFn) {
+    _item = parseFnParams(item)
+  } else if (item instanceof LengthParseObj) {
+    _item = item
+  } else if (item && lengthReg.test(item)) {
+    _item = item
+  }
+  if (_item) {
+    return _item instanceof AstFn ? _item.fn!(length) : getLengthValue(_item, length)
+  } else {
+    return defaultVal
   }
 }

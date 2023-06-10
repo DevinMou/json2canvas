@@ -15,6 +15,7 @@ import {
 import { ReactCompute } from '../util/react_compute'
 import { NOS, PickKeyByValueType, PickRequried } from '../util/type'
 import { FlexItemProp, parseFlex } from './flex'
+import { getMarginOrPaddingValue } from './position'
 
 const computedText: {
   canvas?: SampleCanvas.Canvas
@@ -412,6 +413,7 @@ const getRectsPropPromise = <T>(
 type RectAndStyleType = {
   rect: ReturnType<typeof initRectAndStyle>['rect']
   style: ReturnType<typeof coverStyles2RealValue>
+  layout?: ComputedLayout
 }
 
 const mergeSize = async (layout: ComputedLayout, isHeight = false) => {
@@ -731,22 +733,23 @@ const mergeSize = async (layout: ComputedLayout, isHeight = false) => {
           setWidthOrHeightByStyle(layout.rect, tempHeight, false, true)
         })
         const maxWidth = Math.max(
-          ...(await Promise.all(
-            levels.map(({ children: level }) =>
-              Promise.all(
-                level.map(item =>
-                  getMarginOrPaddingValuePromise(item.rect, ['margin-width', 'padding-width']).then(
-                    ([marginWidth, paddingWidth]) =>
-                      item.rect.percentFn.width === undefined
-                        ? item.rect.boxWidth! + marginWidth
-                        : item.styles['box-sizing'] === 'border-box'
-                        ? marginWidth
-                        : paddingWidth + marginWidth
-                  )
-                )
-              ).then(res => res.reduce((a, b) => a + b, 0))
-            )
-          ))
+          ...levels.map(({ children: level }) =>
+            level
+              .map(item => {
+                const marginWidth = [item.rect.margin[1], item.rect.margin[3]]
+                  .map(e => (e instanceof Object ? e.flexLength : typeof e === 'number' ? e : 0))
+                  .reduce((a, b) => a + b, 0)
+                const paddingWidth = [item.rect.padding[1], item.rect.padding[3]]
+                  .map(e => (e instanceof Object ? e.flexLength : typeof e === 'number' ? e : 0))
+                  .reduce((a, b) => a + b, 0)
+                return item.rect.percentFn.width === undefined
+                  ? item.rect.boxWidth! + marginWidth
+                  : // : item.styles['box-sizing'] === 'border-box'
+                    // ? marginWidth
+                    paddingWidth + marginWidth
+              })
+              .reduce((a, b) => a + b, 0)
+          )
         )
         setWidthOrHeightByStyle(layout.rect, maxWidth, false)
       } else {
@@ -888,7 +891,7 @@ type MorP = 'margin' | 'padding'
 type MarginOrPaddingDir = 'left' | 'top' | 'right' | 'bottom' | 'width' | 'height'
 export type MorPDir = `${MorP}-${MarginOrPaddingDir}`
 
-export const getMarginOrPaddingValuePromise = async (rect: LayoutRect, params: MorPDir[]) => {
+export const getMarginOrPaddingValuePromise = async (rect: RectAndStyleType['rect'], params: MorPDir[]) => {
   return await Promise.all(
     params.map(async dir => {
       const [prop, kword] = dir.split('-') as [MorP, MarginOrPaddingDir]
@@ -1005,7 +1008,7 @@ const initRectAndStyle = (layout: DrawLayout, parentRAT?: RectAndStyleType) => {
     left: undefined,
     top: undefined,
     transformOrigin,
-    transform,
+    // transform,
     right: undefined,
     bottom: undefined,
     computedMarginLeft: undefined,
@@ -1021,6 +1024,7 @@ const initRectAndStyle = (layout: DrawLayout, parentRAT?: RectAndStyleType) => {
     // marginHeight: margin[0] + margin[2],
     parentRect: undefined,
     parentStyle: undefined,
+    parentLayout: parentRAT?.layout,
     styleSplits,
     textLines: undefined
   }).value<
@@ -1264,14 +1268,16 @@ const initRectAndStyle = (layout: DrawLayout, parentRAT?: RectAndStyleType) => {
   }
 }
 
-export type LayoutRect = ReturnType<typeof initRectAndStyle>['rect']
-export type LayoutStyle = ReturnType<typeof initRectAndStyle>['style']
+export type LayoutRect = RectAndStyleType['rect']
+export type LayoutStyle = RectAndStyleType['style']
 
 export const parseLayout = (layout: DrawLayout, parentRAT?: RectAndStyleType) => {
   const { rect, style } = initRectAndStyle(layout, parentRAT)
   const computedLayout = { ...layout, styles: style } as ComputedLayout
   if (computedLayout.children && computedLayout.children.length) {
-    const children = computedLayout.children.map(e => parseLayout(e, { rect, style })) as ComputedLayout['children']
+    const children = computedLayout.children.map(e =>
+      parseLayout(e, { rect, style, layout: computedLayout })
+    ) as ComputedLayout['children']
     computedLayout.children = children as ComputedLayout[]
   }
   computedLayout.rect = rect

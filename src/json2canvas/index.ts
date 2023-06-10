@@ -36,7 +36,8 @@ export const windowInfo: Record<string, unknown> & {
   dpr: 1,
   unit: {
     px: 1,
-    rpx: 1
+    rpx: 1,
+    deg: Math.PI / 180
   }
 }
 export const initWindow = (_windowInfo: Partial<typeof windowInfo>) => {
@@ -52,7 +53,7 @@ export interface DrawStyles {
   right: NOS
   bottom: NOS
   background: string
-  position: 'relative' | 'absolute'
+  position: 'relative' | 'absolute' | 'static'
   'z-index': number
   display: 'block' | 'flex' | 'inline-block' | 'inline-flex'
   'flex-direction': 'column' | 'row'
@@ -190,9 +191,9 @@ export const draw = async (layout: DrawLayout) => {
     const layoutRect = getLayoutPosition(computedLayout)
     const rootWidth = getMarginOrPaddingValue(layoutRect.rect, 'padding-width') + (layoutRect.rect.boxWidth || 0)
     const rootHeight = getMarginOrPaddingValue(layoutRect.rect, 'padding-height') + layoutRect.rect.boxHeight!
-    const canvas = windowInfo.createCanvas!(true, rootWidth * windowInfo.dpr, rootHeight * windowInfo.dpr)
+    const canvas = windowInfo.createCanvas!(true, rootWidth, rootHeight)
     const ctx = canvas.getContext('2d')
-    ctx.scale(windowInfo.dpr, windowInfo.dpr)
+    // ctx.scale(windowInfo.dpr, windowInfo.dpr)
     await drawItem(canvas, ctx, layoutRect)
     return { canvas, width: rootWidth, height: rootHeight, layout: layoutRect }
   } catch (err) {

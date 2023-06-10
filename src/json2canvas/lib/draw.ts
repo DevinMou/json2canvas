@@ -1,5 +1,17 @@
+import { resolve } from 'path'
 import { ComputedLayout, windowInfo } from '..'
-import { getBorderOption, getBorderRadius, parseLengthStr, percentStrReg } from '../util/common'
+import {
+  AstFn,
+  computeAstFnParam,
+  getBorderOption,
+  getBorderRadius,
+  getLengthValue,
+  LengthParseObj,
+  lengthReg,
+  parseFnParams,
+  parseLengthStr,
+  percentStrReg
+} from '../util/common'
 import { MT } from '../util/sample_matrix'
 import { NOS, SpecifiedLengthTuple } from '../util/type'
 import { parseBackgroundShorthand } from './background'
@@ -15,40 +27,38 @@ type TransformType =
     }
   | {
       type: 'rotate'
-      value: {
-        deg: number
-      }
+      value: number
     }
 
-const val2XY = (valArr: NOS[], parentValWidth: number, parentValHeight: number) => {
+const val2XY = (valArr: AstFn['params'], parentValWidth: number, parentValHeight: number) => {
   const res = {
     x: 0,
     y: 0
   }
   valArr.forEach((item, index) => {
-    if (typeof item === 'number') {
-      if (index === 0) {
-        res.x = item
-        res.y = item
-      }
-      if (index === 1) {
-        res.y = item
-      }
-    } else if (percentStrReg.test(item || '')) {
-      const pv = +percentStrReg.exec(item)![1]
-      if (index === 0) {
-        res.x = (parentValWidth * pv) / 100
-        res.y = (parentValHeight * pv) / 100
-      }
-      if (index === 1) {
-        res.y = (parentValHeight * pv) / 100
-      }
+    if (!index) {
+      res.x = computeAstFnParam(item, parentValWidth)
+    }
+    if (valArr.length === 1 || index) {
+      res.y = computeAstFnParam(item, parentValHeight)
     }
   })
   return res
 }
 
 function createMatrix(transforms: TransformType[]) {
+  /* let matrix = MT(
+    [
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1]
+    ],
+    [
+      [windowInfo.dpr, 0, 0],
+      [0, windowInfo.dpr, 0],
+      [0, 0, 1]
+    ]
+  )! */
   let matrix = [
     [1, 0, 0],
     [0, 1, 0],
@@ -67,7 +77,7 @@ function createMatrix(transforms: TransformType[]) {
         break
       case 'rotate':
         {
-          const angle = (transform.value.deg * Math.PI) / 180
+          const angle = transform.value
           const cos = Math.cos(angle)
           const sin = Math.sin(angle)
           matrix = MT(matrix, [
@@ -85,8 +95,8 @@ function createMatrix(transforms: TransformType[]) {
         ])!
         break
       case 'skew': {
-        const xtan = Math.tan((transform.value.x * Math.PI) / 180)
-        const ytan = Math.tan((transform.value.y * Math.PI) / 180)
+        const xtan = Math.tan(transform.value.x)
+        const ytan = Math.tan(transform.value.y)
         matrix = MT(matrix, [
           [1, xtan, 0],
           [ytan, 1, 0],
@@ -228,7 +238,7 @@ export const drawItem = async (
   const tempParentLeft = parentLeft
   const tempParentTop = parentTop
   const parentCtx = ctx
-  if (layout.rect.transform) {
+  if (layout.rect.styleSplits.transform) {
     canvas = windowInfo.createCanvas!(true, layout.rect.boxWidth, layout.rect.boxHeight)
     ctx = canvas.getContext('2d')
     parentLeft = 0
@@ -564,7 +574,7 @@ export const drawItem = async (
     const zIndexChildren: ComputedLayout[] = []
     layout.children.forEach(item => {
       if (item.styles.position === undefined) {
-        if (item.rect.transform) {
+        if (item.rect.styleSplits.transform) {
           transformChildren.push(item)
         } else {
           normalChildren.push(item)
@@ -579,7 +589,7 @@ export const drawItem = async (
       ...zIndexChildren.sort((a, b) => (a.styles['z-index'] || 0) - (b.styles['z-index'] || 0))
     ]
     for (const item of sortChildren) {
-      if (item.styles.position === 'absolute') {
+      /* if (item.styles.position === 'absolute') {
         item.rect.left =
           item.rect.left === undefined
             ? contentWidth -
@@ -596,55 +606,71 @@ export const drawItem = async (
               getMarginOrPaddingValue(item.rect, 'padding-top') -
               getMarginOrPaddingValue(item.rect, 'padding-bottom')
             : item.rect.top
-      }
+      } */
       await drawItem(canvas, ctx, item, parentLeft, parentTop)
     }
   }
-  if (layout.rect.transform) {
+  if (layout.rect.styleSplits.transform) {
     const originX = layout.rect.transformOrigin.xPercent
       ? (layout.rect.boxWidth! * layout.rect.transformOrigin.x) / 100
       : layout.rect.transformOrigin.x
     const originY = layout.rect.transformOrigin.yPercent
       ? (layout.rect.boxHeight! * layout.rect.transformOrigin.y) / 100
       : layout.rect.transformOrigin.y
-    const transform = layout.rect.transform
+    const transform = layout.rect.styleSplits.transform
       .map(item => {
-        switch (item.type) {
-          case 'translate': {
-            const value = val2XY(item.value, layout.rect.boxWidth!, layout.rect.boxHeight!)
-            return {
-              type: item.type,
-              value: {
-                x: value.x / windowInfo.dpr,
-                y: value.y / windowInfo.dpr
+        if (item instanceof AstFn) {
+          switch (item.type) {
+            case 'translate': {
+              const value = val2XY(
+                item.params.filter(e => e !== ','),
+                layout.rect.boxWidth!,
+                layout.rect.boxHeight!
+              )
+              return {
+                type: item.type,
+                value: {
+                  x: value.x / windowInfo.dpr,
+                  y: value.y / windowInfo.dpr
+                }
               }
             }
+            case 'scale': {
+              const params = item.params
+                .filter(e => e !== ',')
+                .map(e => {
+                  return computeAstFnParam(e, 0, 1)
+                })
+              return {
+                type: item.type,
+                value: {
+                  x: +params[0],
+                  y: +(params.length > 1 ? params[1] : params[0])
+                }
+              }
+            }
+            case 'rotate':
+              return {
+                type: item.type,
+                value: computeAstFnParam(item.params[0])
+              }
+            case 'skew': {
+              const params = item.params
+                .filter(e => e !== ',')
+                .map(e => {
+                  return computeAstFnParam(e)
+                })
+              return {
+                type: item.type,
+                value: {
+                  x: parseLengthStr(params[0]).value,
+                  y: params.length > 1 ? params[1] : 0
+                }
+              }
+            }
+            default:
+              return null
           }
-          case 'scale':
-            return {
-              type: item.type,
-              value: {
-                x: +item.value[0] * windowInfo.dpr,
-                y: +(item.value.length > 1 ? item.value[1] : item.value[0]) * windowInfo.dpr
-              }
-            }
-          case 'rotate':
-            return {
-              type: item.type,
-              value: {
-                deg: parseLengthStr(item.value[0]).value
-              }
-            }
-          case 'skew':
-            return {
-              type: item.type,
-              value: {
-                x: parseLengthStr(item.value[0]).value,
-                y: item.value.length > 1 ? parseLengthStr(item.value[1]) : 0
-              }
-            }
-          default:
-            return null
         }
       })
       .filter(item => item) as TransformType[]
@@ -652,6 +678,13 @@ export const drawItem = async (
       {
         type: 'translate',
         value: { x: tempParentLeft + originX, y: tempParentTop + originY }
+      },
+      {
+        type: 'scale',
+        value: {
+          x: windowInfo.dpr,
+          y: windowInfo.dpr
+        }
       },
       ...transform
     ])

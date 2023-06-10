@@ -5,10 +5,13 @@ const layout: DrawLayout = {
   styles: {
     // display: 'inline-flex',
     display: 'inline-block',
+    overflow: 'hidden',
     background: 'pink',
     // 'flex-direction': 'column',
     'flex-wrap': 'nowrap',
     'font-size': 0,
+    padding: '20px',
+    position: 'relative',
     'justify-content': 'flex-end'
     // height: '250px'
   },
@@ -28,7 +31,7 @@ const layout: DrawLayout = {
         padding: '0 calc(5% + 20px)'
       }
     },
-    /* {
+    {
       type: 'view',
       styles: {
         width: 'auto',
@@ -39,7 +42,7 @@ const layout: DrawLayout = {
         display: 'inline-flex',
         'box-sizing': 'content-box',
         'transform-origin': 'right top',
-        transform: 'scale(.8, .8) skew(20deg) rotate(30deg) translate(10px, 50px)'
+        transform: 'scale(.8, .8) skew(20deg) rotate(30deg) translate(10px, calc(50px - 5%))'
       },
       children: [
         {
@@ -63,21 +66,37 @@ const layout: DrawLayout = {
           }
         }
       ]
-    }, */
+    },
     {
       type: 'view',
       styles: {
         width: '100px',
-        height: 'auto',
+        // height: 'auto',
+        height: '50px',
         background: 'green',
         flex: '0 1 auto',
         'box-sizing': 'content-box',
-        display: 'inline-block',
-        margin: '0 0 30px 0',
-        padding: '0 min(5%, 20px)'
-      }
+        display: 'block',
+        margin: '0 0 30px 0'
+        // position: 'absolute'
+        // right: '0'
+        // padding: '0 min(5%, 20px)'
+      },
+      children: [
+        {
+          type: 'view',
+          styles: {
+            width: '20px',
+            height: '20px',
+            background: 'black',
+            position: 'absolute',
+            bottom: 'calc(20px + 30%)',
+            transform: 'translate(100%, 0) scale(1.5)'
+          }
+        }
+      ]
     },
-    /* {
+    {
       type: 'view',
       styles: {
         width: '100px',
@@ -90,7 +109,7 @@ const layout: DrawLayout = {
         display: 'inline-block',
         'align-self': 'center'
       }
-    }, */
+    },
     {
       type: 'view',
       styles: {
@@ -101,8 +120,8 @@ const layout: DrawLayout = {
         'box-sizing': 'content-box',
         margin: '20px 0',
         display: 'block',
-        'align-self': 'center',
-        padding: '0 max(5%, 20px)'
+        'align-self': 'center'
+        // padding: '0 max(5%, 20px)'
       }
     },
     {
@@ -246,13 +265,6 @@ const layout2: DrawLayout = {
   ]
 }
 window.onload = () => {
-  console.log(
-    246,
-    parseStr2Ast(
-      'url("https://image.brightf\'utur\'e360.com/static/temple/merit-box/btn-1.png") no-repeat  center top calc(-15% + 10px)/cover,linear-gradient(135deg, red, orange 10%, yellow, green, blue 31%,40%,purple 50%,black calc(100% - 20px), #fff) repeat bottom 10px right/calc(100% - min(1%, 5px)) calc(calc(50% / 2) - calc(10px + 5px)) content-box border-box,#ff0000'
-    )
-  )
-
   const h = (l: DrawLayout): HTMLDivElement | HTMLImageElement => {
     const _children = l.children ? l.children.map(e => h(e)) : l.type === 'view' && l.content ? l.content : ''
     const tag = l.type === 'view' ? 'div' : 'img'

@@ -1,4 +1,4 @@
-import { ComputedLayout, windowInfo, DrawLayout, DrawStyles, setWidthOrHeightByStyle, getFlexLayout, getDir } from '..'
+import { ComputedLayout, windowInfo, DrawLayout, setWidthOrHeightByStyle, getFlexLayout, getDir } from '..'
 import {
   getRealValue,
   percentStrReg,

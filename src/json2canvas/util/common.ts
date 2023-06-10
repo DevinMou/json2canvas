@@ -1,4 +1,4 @@
-import { DrawStyles, windowInfo } from '..'
+import { windowInfo } from '..'
 import { NOS, SpecifiedLengthTuple } from './type'
 
 export const percentStrReg = /^([+-]?[\d.]+)%$/

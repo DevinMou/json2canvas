@@ -1,4 +1,3 @@
-import { resolve } from 'path'
 import { ComputedLayout, windowInfo } from '..'
 import {
   AstFn,

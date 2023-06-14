@@ -11,17 +11,17 @@ import {
   lengthReg,
   reg_hex,
   parseStr2Ast,
-  AstItem,
   AstFn,
   parseAstItem2AstFnAndStr,
   LengthParseObj,
-  parseFnParams
+  parseFnParams,
+  getColorByAstItem
 } from '../../util/common'
 import { ReactCompute } from '../../util/react_compute'
 import { getMarginOrPaddingValue } from '../position'
 
 export const parseBackgroundShorthand = async (bgCanvas: SampleCanvas.Canvas, background: string, rect: LayoutRect) => {
-  // bstr = 'url(https://xxx.xxx.xxx) no-repeat top/contain,linear-gradient(90deg, rgba(220,0,123,0.6), #fce5bd 80%, #fce1b6) no-repeat bottom/750px 200px,#ff0000'
+  const reactCompute = new ReactCompute()
   const splitArr = parseStr2Ast(background)
     .children?.filter(item => item.type !== 'space')
     .map(item => {
@@ -139,14 +139,9 @@ export const parseBackgroundShorthand = async (bgCanvas: SampleCanvas.Canvas, ba
     clip: 'border-box' | 'padding-box' | 'content-box' // 'text'
     origin: 'border-box' | 'padding-box' | 'content-box'
   }
-  await ReactCompute.watch(
-    () => rect.contentWidth !== undefined && rect.contentHeight !== undefined,
-    e => e,
-    { immediate: true }
-  )
   const backgroundCtx = bgCanvas.getContext('2d')
   for (const item of tempDistArr.reverse()) {
-    const backgroundItem = ReactCompute.reactive<BackgroundItem>(
+    const backgroundItem = reactCompute.reactive<BackgroundItem>(
       {
         clip: 'border-box',
         origin: 'padding-box',
@@ -158,7 +153,7 @@ export const parseBackgroundShorthand = async (bgCanvas: SampleCanvas.Canvas, ba
       true
     ).value()
     if (item.image) {
-      backgroundItem.image = ReactCompute.reactive({
+      backgroundItem.image = reactCompute.reactive({
         type: item.image.type,
         params: item.image.params,
         el: undefined
@@ -169,11 +164,9 @@ export const parseBackgroundShorthand = async (bgCanvas: SampleCanvas.Canvas, ba
         }
       >()
       if (item.image.type === 'url') {
-        const el = windowInfo.createImage!()
-        el.onload = () => {
+        windowInfo.createImage!(item.image.params.join('')).then(el => {
           backgroundItem.image!.el = el
-        }
-        el.src = item.image.params.join('')
+        })
       }
     }
     if (item.clip_origin && item.clip_origin.length) {
@@ -184,18 +177,9 @@ export const parseBackgroundShorthand = async (bgCanvas: SampleCanvas.Canvas, ba
       }
     }
     if (item.color) {
-      let rgba: SpecifiedLengthTuple<number, 4> | null = null
-      if (typeof item.color === 'string') {
-        if (reg_hex.test(item.color)) {
-          rgba = hex2rgba(item.color)
-        } else if (item.color in colorKeyWordRGB) {
-          rgba = [...colorKeyWordRGB[item.color], 1]
-        }
-      } else if (['rgb', 'rgba', 'hsl', 'hsla'].includes(item.color.type)) {
-        rgba = item.color.fn!(0)
-      }
-      if (rgba) {
-        backgroundCtx.fillStyle = `rgba(${rgba.join(',')})`
+      const color = getColorByAstItem(item.color)
+      if (color) {
+        backgroundCtx.fillStyle = color
         backgroundCtx.fillRect(0, 0, rect.boxWidth!, rect.boxHeight!)
       }
     } else if (item.image) {
@@ -301,13 +285,12 @@ export const parseBackgroundShorthand = async (bgCanvas: SampleCanvas.Canvas, ba
           backgroundRect.image.widthAuto = true
           backgroundRect.image.heightAuto = true
         }
-        const clipCanvas = windowInfo.createCanvas!(true, backgroundRect.clip.width, backgroundRect.clip.height)
+        const clipCanvas = await windowInfo.createCanvas!(true, backgroundRect.clip.width, backgroundRect.clip.height)
         const clipCtx = clipCanvas.getContext('2d')
         if (item.image!.type === 'url') {
-          await ReactCompute.watch(
+          await reactCompute.watch(
             () => backgroundItem.image && backgroundItem.image.el,
-            e => e,
-            { immediate: true }
+            e => e
           )
           const imgWidth = backgroundItem.image!.el!.width
           const imgHeight = backgroundItem.image!.el!.height
@@ -503,31 +486,20 @@ export const parseBackgroundShorthand = async (bgCanvas: SampleCanvas.Canvas, ba
           const gradientPoints = colorsGroup
             .map(item => item.flat())
             .map(item => {
-              let rgba: SpecifiedLengthTuple<number, 4> | undefined = undefined
               const points: GradientPoint[] = []
               const item_1st = item[0]
-              if (typeof item_1st === 'string') {
-                if (reg_hex.test(item_1st)) {
-                  rgba = hex2rgba(item_1st) || undefined
-                } else if (item_1st in colorKeyWordRGB) {
-                  rgba = [...colorKeyWordRGB[item_1st], 1]
-                } else if (lengthReg.test(item_1st)) {
+              const rgba = getColorByAstItem(item_1st, true) || undefined
+              if (!rgba) {
+                if (typeof item_1st === 'string' && lengthReg.test(item_1st)) {
                   points.push({
                     valueFn: length => getLengthValue(item_1st, length)
                   })
-                }
-              } else if (item_1st instanceof AstFn) {
-                if (['rgb', 'rgba', 'hsl', 'hsla'].includes(item_1st.type)) {
-                  points.push({
-                    color: item_1st.fn!(0)
-                  })
-                } else {
+                } else if (item_1st instanceof AstFn) {
                   points.push({
                     valueFn: length => item_1st.fn!(length)
                   })
                 }
               }
-              rgba = rgba || undefined
               if (item.length === 1 && rgba) {
                 points.push({
                   color: rgba
@@ -560,7 +532,7 @@ export const parseBackgroundShorthand = async (bgCanvas: SampleCanvas.Canvas, ba
             : backgroundRect.image.height
           const lineGradientParams = getGradientLine(gradientAngle, gradientWidth, gradientHeight, gradientPoints)
           if (lineGradientParams) {
-            const gradientCanvas = windowInfo.createCanvas!(true, gradientWidth, gradientHeight)
+            const gradientCanvas = await windowInfo.createCanvas!(true, gradientWidth, gradientHeight)
             const gradientCtx = gradientCanvas.getContext('2d')
             const gradient = gradientCtx.createLinearGradient(
               lineGradientParams.startPoint.x,
@@ -827,20 +799,18 @@ export const parseBackgroundShorthand = async (bgCanvas: SampleCanvas.Canvas, ba
         }
 
         if (backgroundItem.image && backgroundItem.image.el) {
-          repeatAreas.forEach(area => {
-            clipCtx.drawImage(backgroundItem.image!.el!, area.x, area.y, area.w, area.h)
-          })
+          for (let area of repeatAreas) {
+            await clipCtx.drawImage(backgroundItem.image!.el!, area.x, area.y, area.w, area.h)
+          }
         }
 
-        backgroundCtx.drawImage(
+        await backgroundCtx.drawImage(
           clipCanvas,
           backgroundRect.clip.left,
           backgroundRect.clip.top,
           backgroundRect.clip.width,
           backgroundRect.clip.height
         )
-
-        console.log(839, backgroundItem)
       }
     }
   }

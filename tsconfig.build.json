@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": true,
+    "outDir": "build",
+    "declarationDir": "build/types",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "typeRoots": [
+      "./types"
+    ],
+  },
+  "references": [
+    {
+      "path": "./types"
+    }
+  ]
+}

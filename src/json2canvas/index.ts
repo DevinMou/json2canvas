@@ -1,16 +1,14 @@
+/// <reference path="../types/sample_canvas.d.ts" />
+/// <reference path="../types/supported_css_props.d.ts" />
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 
 import { drawItem } from './lib/draw'
-import { setFlexSizeLength } from './lib/flex'
 import { getLayoutPosition, getMarginOrPaddingValue } from './lib/position'
-import { LayoutRect, LayoutStyle, parseLayout, getMarginOrPaddingValuePromise } from './lib/rect'
+import { LayoutRect, LayoutStyle, Rect } from './lib/rect'
 import { ReactCompute } from './util/react_compute'
-import { PickRequried, NOS } from './util/type'
+import { PickRequried } from './util/type'
 
-/*
-reactive,compute
-*/
 declare global {
   interface Array<T> {
     includes(searchElement: T | any, fromIndex?: number): boolean
@@ -22,23 +20,85 @@ declare global {
 
 export type SampleCanvasType<T extends boolean = false> = SampleCanvas.Canvas<T>
 export type SampleImageType = SampleImage
+const drawTexts = (layout: ComputedLayout, ctx: SampleCanvas.RenderContext, parentTop: number, parentLeft: number) => {
+  if (layout.content) {
+    let fontWeight: 'normal' | 'bold' = 'normal'
+    if (layout.styles['font-weight']) {
+      if (typeof layout.styles['font-weight'] === 'string') {
+        if (layout.styles['font-weight'] === 'bold') {
+          fontWeight = 'bold'
+        }
+      } else {
+        if (layout.styles['font-weight'] > 500) {
+          fontWeight = 'bold'
+        }
+      }
+    }
+    ctx.font = `${layout.styles['font-style'] || ''} ${fontWeight} ${layout.styles['font-size']}px/${layout.styles['line-height']
+      }px PingFangSC-Medium, "PingFang SC", sans-serif`.trim()
+    ctx.fillStyle = layout.styles.color!
+    const offsetX = {
+      left: 0,
+      center: (layout.rect.boxWidth || 0) / 2,
+      right: layout.rect.boxWidth || 0
+    }
+    ctx.textAlign = layout.styles['text-align'] || 'left'
+    ctx.textBaseline = 'middle'
+    const offsetY = -layout.styles['line-height']! / 2
+    if (layout.rect.textLines) {
+      let lines = [...layout.rect.textLines]
+      if (layout.styles['line-clamp']) {
+        const clamp = layout.styles['line-clamp']
+        if (lines.length > clamp) {
+          lines[clamp - 1] = lines[clamp - 1].replace(/.{1}$/, '...')
+          lines = lines.slice(0, clamp)
+        }
+      }
+      lines.forEach((e, i) => {
+        ctx.fillText(
+          e,
+          parentLeft +
+          getMarginOrPaddingValue(layout.rect, 'padding-left') +
+          offsetX[layout.styles['text-align'] || 'left'] || 0,
+          parentTop +
+          getMarginOrPaddingValue(layout.rect, 'padding-top') +
+          (i + 1) * layout.styles['line-height']! +
+          offsetY,
+          layout.rect.boxWidth
+        )
+      })
+    } else {
+      ctx.fillText(
+        layout.content,
+        parentLeft +
+        getMarginOrPaddingValue(layout.rect, 'padding-left') +
+        offsetX[layout.styles['text-align'] || 'left'] || 0,
+        parentTop + getMarginOrPaddingValue(layout.rect, 'padding-top') + layout.styles['line-height']! + offsetY,
+        layout.rect.boxWidth
+      )
+    }
+  }
+}
 export const windowInfo: Record<string, unknown> & {
   dpr: number
   unit: {
     [k: string]: number
   }
   createCanvas?: {
-    <T extends boolean = true>(isOffScreen: false): SampleCanvas.Canvas<T>
-    <T extends boolean = false>(isOffScreen: true, width?: number, height?: number): SampleCanvas.Canvas<T>
+    (isOffScreen: false): Promise<SampleCanvas.Canvas<true>>
+    (isOffScreen: true, width?: number, height?: number): Promise<SampleCanvas.Canvas<false>>
   }
-  createImage?: (canvas?: SampleCanvas.Canvas) => SampleImage
+  clearCanvas?: () => void
+  createImage?: (src: string,canvas?: SampleCanvas.Canvas) => Promise<SampleImage>
+  drawTexts: (layout: ComputedLayout, ctx: SampleCanvas.RenderContext, parentTop: number, parentLeft: number) => void
 } = {
   dpr: 1,
   unit: {
     px: 1,
     rpx: 1,
     deg: Math.PI / 180
-  }
+  },
+  drawTexts
 }
 export const initWindow = (_windowInfo: Partial<typeof windowInfo>) => {
   for (const k in _windowInfo) {
@@ -66,22 +126,6 @@ export const setWidthOrHeightByStyle = (rect: LayoutRect, length: number, isBord
   }
 }
 
-export const getFlexLayout = (...args: Parameters<typeof setFlexSizeLength>) => {
-  const { flexBoxLength, children } = setFlexSizeLength(...args)
-  if (children.length && children[0].layout.rect.parentRect) {
-    ReactCompute.watch(
-      () => children[0].layout.rect.parentRect.contentWidth,
-      _ => _ !== undefined
-    ).then(() => {
-      children.forEach(e => setWidthOrHeightByStyle(e.layout.rect, e.sizeLength!, !!e.borderBox, args[2]))
-    })
-  }
-  return {
-    flexBoxLength,
-    children
-  }
-}
-
 export interface ComputedLayout extends PickRequried<DrawLayout, 'rect'> {
   styles: LayoutStyle
   children?: ComputedLayout[]
@@ -99,75 +143,27 @@ export const getDir = (isColumn = false, isRe?: boolean) => {
   } as const
 }
 
-/* function createMatrix2(transforms: TransformType[]) {
-  const matrix = [1, 0, 0, 1, 0, 0] as SpecifiedLengthTuple<number, 6>
-  transforms.forEach(function (transform) {
-    switch (transform.type) {
-      case 'translate':
-        matrix[4] += transform.value.x
-        matrix[5] += transform.value.y
-        break
-      case 'rotate':
-        {
-          const angle = (transform.value.deg * Math.PI) / 180
-          const cos = Math.cos(angle)
-          const sin = Math.sin(angle)
-          const m11 = matrix[0] * cos + matrix[2] * sin
-          const m12 = matrix[1] * cos + matrix[3] * sin
-          const m21 = -matrix[0] * sin + matrix[2] * cos
-          const m22 = -matrix[1] * sin + matrix[3] * cos
-          matrix[0] = m11
-          matrix[1] = m12
-          matrix[2] = m21
-          matrix[3] = m22
-        }
-        break
-      case 'scale':
-        matrix[0] *= transform.value.x
-        matrix[1] *= transform.value.x
-        matrix[2] *= transform.value.y
-        matrix[3] *= transform.value.y
-        break
-      case 'skew': {
-        const xtan = Math.tan((transform.value.x * Math.PI) / 180)
-        const ytan = Math.tan((transform.value.y * Math.PI) / 180)
-        const m11 = matrix[0] + matrix[2] * ytan
-        const m12 = matrix[1] + matrix[3] * ytan
-        const m21 = matrix[2] + matrix[0] * xtan
-        const m22 = matrix[3] + matrix[1] * xtan
-        matrix[0] = m11
-        matrix[1] = m12
-        matrix[2] = m21
-        matrix[3] = m22
-      }
-    }
-  })
-  return matrix
-} */
-
 export const draw = async (layout: DrawLayout) => {
   try {
-    const computedLayout = parseLayout(layout)
-    await new Promise<void>(resolve => setTimeout(resolve, 0))
+    const reactCompute = new ReactCompute()
+    const parsedRect = new Rect(reactCompute)
+    reactCompute.resetWatchWaiting()
+    const computedLayout = parsedRect.parseLayout(layout)
+    await reactCompute.getWatchWaiting()
+    await new Promise(r => setTimeout(r, 0))
     const layoutRect = getLayoutPosition(computedLayout)
     const rootWidth = getMarginOrPaddingValue(layoutRect.rect, 'padding-width') + (layoutRect.rect.boxWidth || 0)
     const rootHeight = getMarginOrPaddingValue(layoutRect.rect, 'padding-height') + layoutRect.rect.boxHeight!
-    const canvas = windowInfo.createCanvas!(true, rootWidth, rootHeight)
+    const canvas = await windowInfo.createCanvas!(true, rootWidth, rootHeight)
     const ctx = canvas.getContext('2d')
-    // ctx.scale(windowInfo.dpr, windowInfo.dpr)
     await drawItem(canvas, ctx, layoutRect)
+    if (windowInfo.clearCanvas) {
+      windowInfo.clearCanvas()
+    }
     return { canvas, width: rootWidth, height: rootHeight, layout: layoutRect }
   } catch (err) {
     console.log(1958, err)
-  }
-  /* return await new Promise<{ path: string; width: number; height: number }>(resolve => {
-    wx.canvasToTempFilePath({
-      canvas,
-      success: res =>
-        resolve({ path: res.tempFilePath, width: rootWidth * windowInfo.dpr, height: rootHeight * windowInfo.dpr })
-    })
-  }) */
-}
+  }}
 
 /*
 eg: index.ts (in browser)

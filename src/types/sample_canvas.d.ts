@@ -8,6 +8,14 @@ declare namespace SampleCanvas {
     textBaseline: 'alphabetic' | 'bottom' | 'hanging' | 'ideographic' | 'middle' | 'top'
   }
   type CanvasFillRule = 'evenodd' | 'nonzero'
+  type GlobalCompositeOperation = "color" | "color-burn" | "color-dodge" | "copy" | "darken" | "destination-atop" | "destination-in" | "destination-out" | "destination-over" | "difference" | "exclusion" | "hard-light" | "hue" | "lighten" | "lighter" | "luminosity" | "multiply" | "overlay" | "saturation" | "screen" | "soft-light" | "source-atop" | "source-in" | "source-out" | "source-over" | "xor"
+
+  interface DOMPointInit {
+    w?: number;
+    x?: number;
+    y?: number;
+    z?: number;
+  }
   interface CanvasPath {
     arc(x: number, y: number, radius: number, startAngle: number, endAngle: number, counterclockwise?: boolean): void
     arcTo(x1: number, y1: number, x2: number, y2: number, radius: number): void
@@ -85,7 +93,18 @@ declare namespace SampleCanvas {
     /** Adds to the path the path given by the argument. */
     addPath(path: Path2D, transform?: DOMMatrix2DInit): void
   }
+
+  interface CanvasShadowStyles {
+    shadowBlur: number;
+    shadowColor: string;
+    shadowOffsetX: number;
+    shadowOffsetY: number;
+  }
   
+  interface CanvasCompositing {
+    globalAlpha: number;
+    globalCompositeOperation: GlobalCompositeOperation;
+  }
   interface CanvasDrawPath {
     beginPath(): void
     clip(fillRule?: CanvasFillRule): void
@@ -116,6 +135,23 @@ declare namespace SampleCanvas {
     transform(a: number, b: number, c: number, d: number, e: number, f: number): void
     translate(x: number, y: number): void
   }
+
+  interface TextMetrics {
+    /** Returns the measurement described below. */
+    readonly actualBoundingBoxAscent: number;
+    /** Returns the measurement described below. */
+    readonly actualBoundingBoxDescent: number;
+    /** Returns the measurement described below. */
+    readonly actualBoundingBoxLeft: number;
+    /** Returns the measurement described below. */
+    readonly actualBoundingBoxRight: number;
+    /** Returns the measurement described below. */
+    readonly fontBoundingBoxAscent: number;
+    /** Returns the measurement described below. */
+    readonly fontBoundingBoxDescent: number;
+    /** Returns the measurement described below. */
+    readonly width: number;
+  }
   interface CanvasText {
     fillText(text: string, x: number, y: number, maxWidth?: number): void
     measureText(text: string): TextMetrics
@@ -136,6 +172,11 @@ declare namespace SampleCanvas {
       dh: number
     ): void
   }
+
+  interface CanvasState {
+    restore(): void;
+    save(): void;
+  }
   interface RenderContext
     extends CanvasDrawImage,
       CanvasTextDrawingStyles,
@@ -145,18 +186,19 @@ declare namespace SampleCanvas {
       CanvasFillStrokeStyles,
       CanvasTransform,
       CanvasDrawPath,
+      CanvasShadowStyles,
+      CanvasCompositing,
+      CanvasState,
       CanvasPath {
     readonly canvas: Canvas
   }
-  interface BlobCallback {
-    (blob: Blob | null): void;
-  }
+
   type Canvas<CanExclude extends boolean = false> = {
     width: number
     height: number
     getContext: (type: '2d' | 'webgl') => RenderContext
   } & (CanExclude extends true ? {
-    toBlob(callback: BlobCallback, type?: string, quality?: any): void;
+    toBlob(callback: (blob: any) => void, type?: string, quality?: any): void;
     toDataURL(type?: string, quality?: any): string;
   } : {})
   

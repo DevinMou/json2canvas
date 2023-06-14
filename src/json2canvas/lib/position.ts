@@ -2,8 +2,6 @@ import { ComputedLayout, getDir } from '..'
 import { computeAstFnParam } from '../util/common'
 import { LayoutRect, MorPDir } from './rect'
 
-const positionKeys = ['top', 'left', 'right', 'bottom'] as const
-type PositionKey = (typeof positionKeys)[number]
 export const getMarginOrPaddingValue = (rect: LayoutRect, dir: MorPDir) => {
   const [prop, kword] = dir.split('-') as MorPDir extends `${infer T}-${infer U}` ? [T, U] : never
   const item = rect[prop]

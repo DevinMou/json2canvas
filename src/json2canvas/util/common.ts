@@ -147,6 +147,8 @@ export const colorKeyWordRGB: { [k: string]: SpecifiedLengthTuple<number, 3> } =
   yellowgreen: [154, 205, 50]
 }
 
+const colorFnNames = ['rgb', 'rgba', 'hsl', 'hsla'] as const
+
 export class LengthParseObj {
   source: NOS = ''
   value = 0
@@ -664,7 +666,7 @@ export const parseFnParams = (fnItem: AstFn): AstFn | LengthParseObj => {
     case 'hsla':
       fnItem.fn = <T = number[]>(length: number) => {
         return fnItem.params
-          .filter(item => (item instanceof String ? ![',', '/'].includes(item) : true))
+          .filter(item => (typeof item === 'string' ? ![',', '/'].includes(item) : true))
           .map(item => (item instanceof AstFn ? item.fn!(length) : +item)) as T
       }
       break
@@ -696,3 +698,27 @@ export const computeAstFnParam = (item: AstFn['params'][number] | undefined, len
     return defaultVal
   }
 }
+
+function getColorByAstItem(astItem: AstFn['params'][number], needReturnArr: true): SpecifiedLengthTuple<number, 4> | null
+function getColorByAstItem(astItem: AstFn['params'][number], needReturnArr?: false): string | null
+function getColorByAstItem(astItem: AstFn['params'][number], needReturnArr = false) {
+  let rgba: SpecifiedLengthTuple<number, 4> | null = null
+  if (astItem instanceof AstFn) {
+    if (colorFnNames.includes(astItem.type) && astItem.fn) {
+      rgba = astItem.fn(0)
+    }
+  } else if (typeof astItem === 'string') {
+    if (reg_hex.test(astItem)) {
+      rgba = hex2rgba(astItem)
+    } else if (astItem in colorKeyWordRGB) {
+      rgba = [...colorKeyWordRGB[astItem], 1]
+    }
+  }
+  if (needReturnArr) {
+    return rgba
+  } else {
+    return rgba ? `rgba(${rgba.join(',')})` : null
+  }
+}
+
+export {getColorByAstItem}

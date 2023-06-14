@@ -1,5 +1,5 @@
-type NOS = number | string
 interface DrawStyles {
+  // NOS is number | string
   width: NOS
   height: NOS
   top: NOS
@@ -17,6 +17,7 @@ interface DrawStyles {
   'align-items': 'flex-start' | 'flex-end' | 'center' | 'stretch'
   'justify-content': 'flex-start' | 'flex-end' | 'center' | 'space-between' | 'space-around'
   'box-sizing': 'border-box' | 'content-box'
+  'box-shadow': string
   'object-fit': 'contain' | 'cover'
   'border-radius': NOS
   'line-height': NOS

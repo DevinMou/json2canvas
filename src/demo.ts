@@ -1,5 +1,4 @@
-import { draw, initWindow, DrawLayout, SampleCanvasType, SampleImageType } from './json2canvas'
-import { parseStr2Ast } from './json2canvas/util/common'
+import { draw, initWindow, DrawLayout, SampleCanvasType, SampleImageType, windowInfo } from './json2canvas'
 const layout: DrawLayout = {
   type: 'view',
   styles: {
@@ -107,6 +106,7 @@ const layout: DrawLayout = {
         padding: '0 20px',
         // 'box-sizing': 'border-box',
         display: 'inline-block',
+        'box-shadow': 'inset -20px -10px 10px 20px #000, 5px 5px 5px',
         'align-self': 'center'
       }
     },
@@ -174,7 +174,7 @@ const layout2: DrawLayout = {
         background: 'rgba(207, 146, 83, 0.8)',
         margin: '19rpx auto 0',
         'font-size': '25rpx',
-        'font-weight': 500,
+        'font-weight': 400,
         color: '#fff7cf',
         'line-height': '50rpx',
         'text-align': 'center'
@@ -208,7 +208,7 @@ const layout2: DrawLayout = {
             'white-space': 'pre-line',
             padding: '0 58rpx',
             'font-size': '31rpx',
-            'font-weight': 500,
+            'font-weight': 400,
             'line-height': '50rpx',
             color: '#222220'
           }
@@ -220,7 +220,7 @@ const layout2: DrawLayout = {
       content: '大德寺共修打卡',
       styles: {
         'font-size': '35rpx',
-        'font-weight': 500,
+        'font-weight': 400,
         color: '#4d2607',
         'line-height': '48rpx',
         margin: '58rpx 0 0 50rpx'
@@ -231,7 +231,7 @@ const layout2: DrawLayout = {
       content: '扫码加入小组，一起共修打卡',
       styles: {
         'font-size': '25rpx',
-        'font-weight': 400,
+        'font-weight': 200,
         color: '#7d3d0a',
         'line-height': '35rpx',
         margin: '15rpx 0 91rpx 50rpx'
@@ -288,23 +288,37 @@ window.onload = () => {
   const demoDom = document.getElementById('demo_dom')
   const demoCanvas = document.getElementById('demo_canvas') as HTMLCanvasElement
   demoDom!.appendChild(h(layout))
-  initWindow({
-    dpr: window.devicePixelRatio,
-    // dpr: 1,
-    createCanvas(isOffScreen: boolean, width = 1, height = 1) {
-      if (isOffScreen && OffscreenCanvas) {
-        const dpr = this.dpr || 1
+  function createCanvas(isOffScreen: false): Promise<SampleCanvas.Canvas<true>>
+  function createCanvas(isOffScreen: true, width?: number, height?: number): Promise<SampleCanvas.Canvas<false>>
+  function createCanvas(isOffScreen: boolean, width = 1, height = 1) {
+    if (isOffScreen) {
+      return new Promise<SampleCanvasType<false>>(resolve => {
+        const dpr = windowInfo.dpr || 1
         const offCanvas = new OffscreenCanvas(
           (width as number) * dpr,
           (height as number) * dpr
-        ) as SampleCanvasType<false>
-        offCanvas.getContext('2d').scale(dpr, dpr)
-        return offCanvas
-      } else {
-        return document.createElement('canvas') as unknown as SampleCanvasType<true>
-      }
-    },
-    createImage: () => new Image() as SampleImageType
+        ) as unknown as SampleCanvasType<false>
+        /* const offCanvas = document.createElement('canvas') as unknown as SampleCanvasType<false>
+        offCanvas.width = (width as number) * dpr
+        offCanvas.height = (height as number) * dpr */
+        offCanvas.getContext('2d')!.scale(dpr, dpr)
+        resolve(offCanvas)
+      })
+    } else {
+      return new Promise<SampleCanvasType<true>>(resolve => {
+        resolve(document.createElement('canvas') as unknown as SampleCanvasType<true>)
+      })
+    }
+  }
+  initWindow({
+    dpr: window.devicePixelRatio,
+    // dpr: 1,
+    createCanvas,
+    createImage: (src: string) => new Promise(resolve => {
+      const img = new Image() as SampleImageType
+      img.onload = () => resolve(img)
+      img.src = src
+    })
   })
   draw(layout).then(res => {
     const { canvas, width, height, layout } = res! || {}

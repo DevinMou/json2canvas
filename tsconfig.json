@@ -21,16 +21,20 @@
     "baseUrl": ".",
     "allowJs": true,
     "outDir": "dist",
-    // "types": ["./types"],
+    "typeRoots": [
+      "src/types"
+    ],
     "paths": {
       "@/*": [
         "src/*"
       ],
-      // "~/*": ["./src/pages/*"]
     }
   },
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "build",
+    "demo",
+    "dist"
   ],
   "include": [
     "**/*.ts",
@@ -38,5 +42,4 @@
     "**/*.tsx",
     "demo_serve.ts"
   ],
-  // "references": [{ "path": "./tsconfig.node.json" }]
 }

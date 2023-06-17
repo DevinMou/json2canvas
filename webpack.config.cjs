@@ -19,7 +19,7 @@ module.exports = {
     outputModule: true
   },
   output: {
-    filename: 'json2canvas.min.js',
+    filename: 'json2canvas.js',
     path: path.resolve(__dirname, 'build'),
     libraryTarget: 'module'
   }

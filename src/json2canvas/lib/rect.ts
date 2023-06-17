@@ -10,7 +10,9 @@ import {
   parseStr2Ast,
   AstFn,
   parseAstItem2AstFnAndStr,
-  parseFnParams
+  parseFnParams,
+  computeAstFnParam,
+  getBorderByAst
 } from '../util/common'
 import { ReactCompute } from '../util/react_compute'
 import { NOS, PickKeyByValueType, PickRequried } from '../util/type'
@@ -30,6 +32,12 @@ const getTextLines = async (
     computedText.canvas = await windowInfo.createCanvas!(true)
     computedText.context = computedText.canvas!.getContext('2d')
   }
+  const inheritFont = {
+    size: windowInfo.checkInherit(rect, 'font-size')?.[0],
+    style: windowInfo.checkInherit<string>(rect, 'font-style')?.[0],
+    weight: windowInfo.checkInherit(rect, 'font-weight')?.[0],
+    'line-height': windowInfo.checkInherit(rect, 'line-height')?.[0]
+  }
   const rules = {
     // 换行符是否合并，空格制表符是否合并，文字是否换行，行尾空格是否删除[2换行]
     normal: [1, 1, 1, 1],
@@ -40,7 +48,24 @@ const getTextLines = async (
     'break-spaces': [0, 0, 1, 2]
   }
   const rule = rules[styles['white-space'] || 'normal'] || rules['normal']
-  computedText.context!.font = `${styles['font-weight'] || 'normal'} ${styles['font-size']}px sans-serif`
+  let fontWeight: 'normal' | 'bold' = 'normal'
+  if (inheritFont.weight) {
+    if (typeof inheritFont.weight === 'string') {
+      if (inheritFont.weight === 'bold') {
+        fontWeight = 'bold'
+      }
+    } else if (inheritFont.weight instanceof LengthParseObj) {
+      if (inheritFont.weight.value > 500) {
+        fontWeight = 'bold'
+      }
+    }
+  }
+  const fontSize = computeAstFnParam(inheritFont.size)
+  const lineHeight = computeAstFnParam(inheritFont['line-height'])
+  // computedText.context!.font = `${styles['font-weight'] || 'normal'} ${styles['font-size']}px sans-serif`
+  computedText.context!.font = `${
+    inheritFont.style || ''
+  } ${fontWeight} ${fontSize}px/${lineHeight}px PingFangSC-Medium, "PingFang SC", sans-serif`.trim()
   /* if (styles.width === undefined) {
     const width = computedText.context!.measureText(content).width
     return {
@@ -50,7 +75,7 @@ const getTextLines = async (
     }
   } */
   const width = rect.contentWidth!
-  const baseNum = Math.floor(width / styles['font-size'])
+  const baseNum = Math.floor(width / fontSize)
   const getLine = (str: string) => {
     const len = str.length
     let startIndex = 0
@@ -336,11 +361,11 @@ const RegularMarginOrPadding = (val?: ReturnType<typeof parseCssValue>, allowedN
   }
 }
 type MorP = 'margin' | 'padding'
-type MarginOrPaddingDir = 'left' | 'top' | 'right' | 'bottom' | 'width' | 'height'
+export type BoxDir = 'left' | 'top' | 'right' | 'bottom'
+type MarginOrPaddingDir = BoxDir | 'width' | 'height'
 export type MorPDir = `${MorP}-${MarginOrPaddingDir}`
 export type LayoutRect = RectAndStyleType['rect']
 export type LayoutStyle = RectAndStyleType['style']
-
 
 // parse str function
 
@@ -349,7 +374,7 @@ export const splitCssValueStr = (cssValueStr: string) => {
   return rootAst.children!.filter(item => item.type !== 'space').map(item => parseAstItem2AstFnAndStr(item))
 }
 
-const parseCssValue = (value: NOS) => {
+export const parseCssValue = (value: NOS) => {
   if (typeof value === 'number') {
     return [
       new LengthParseObj({
@@ -384,68 +409,69 @@ export class Rect {
         styleSplits[k as keyof B] = parseCssValue(styles[k as keyof B]!)
       }
     }
-    const border = getBorderArr(styles)
-    const borderLength = border.map(e => (e ? e[0] : 0))
+    const border = getBorderByAst(styleSplits) as Record<BoxDir, { style: string; color: string; width: number }>
     const margin = RegularMarginOrPadding(styleSplits.margin, true)
     const marginCenterAuto = /^\S+\s+auto(\s+\S+(\s+auto)?)?$/.test(styles.margin?.toString() || '')
     const padding = RegularMarginOrPadding(styleSplits.padding)
     const transformOrigin = parseOrigin(style['transform-origin'])
-    const rect = this.reactCompute.reactive({
-      index: undefined,
-      boxWidth: undefined,
-      boxHeight: undefined,
-      contentWidth: undefined,
-      contentHeight: undefined,
-      childrenWidth: undefined,
-      childrenHeight: undefined,
-      isFlex: false,
-      isFlexItem: false,
-      isInline: false,
-      flexBasis: undefined,
-      flexGrow: undefined,
-      flexShrink: undefined,
-      flexIsColumn: false,
-      flexIsWrap: false,
-      crossLength: undefined,
-      crossIndex: 0,
-      flexBaseOutHeight: 0,
-      flexCrossLength: undefined,
-      alignSelf: undefined,
-      percentFn: {},
-      width: undefined,
-      height: undefined,
-      left: undefined,
-      top: undefined,
-      transformOrigin,
-      right: undefined,
-      bottom: undefined,
-      computedMarginLeft: undefined,
-      border,
-      borderWidth: borderLength[1] + borderLength[3],
-      borderHeight: borderLength[0] + borderLength[2],
-      margin,
-      marginCenterAuto,
-      padding,
-      parentRect: undefined,
-      parentStyle: undefined,
-      parentLayout: parentRAT?.layout,
-      styleSplits,
-      textLines: undefined
-    }).value<
-      number,
-      {
-        flexBasis: NOS
-        border: number[]
-        percentFn: {
-          width?: AstFn
-          height?: AstFn
-        }
-        alignSelf: DrawStyles['align-self']
-        parentStyle: RectAndStyleType['style']
-        textLines: string[]
-      },
-      'parentRect'
-    >()
+    const rect = this.reactCompute
+      .reactive({
+        index: undefined,
+        boxWidth: undefined,
+        boxHeight: undefined,
+        contentWidth: undefined,
+        contentHeight: undefined,
+        childrenWidth: undefined,
+        childrenHeight: undefined,
+        isFlex: false,
+        isFlexItem: false,
+        isInline: false,
+        flexBasis: undefined,
+        flexGrow: undefined,
+        flexShrink: undefined,
+        flexIsColumn: false,
+        flexIsWrap: false,
+        crossLength: undefined,
+        crossIndex: 0,
+        flexBaseOutHeight: 0,
+        flexCrossLength: undefined,
+        alignSelf: undefined,
+        percentFn: {},
+        width: undefined,
+        height: undefined,
+        left: undefined,
+        top: undefined,
+        transformOrigin,
+        right: undefined,
+        bottom: undefined,
+        computedMarginLeft: undefined,
+        border,
+        borderWidth: border.left.width + border.right.width,
+        borderHeight: border.top.width + border.bottom.width,
+        margin,
+        marginCenterAuto,
+        padding,
+        parentRect: undefined,
+        parentStyle: undefined,
+        parentLayout: parentRAT?.layout,
+        styleSplits,
+        textLines: undefined
+      })
+      .value<
+        number,
+        {
+          flexBasis: NOS
+          percentFn: {
+            width?: AstFn
+            height?: AstFn
+          }
+          alignSelf: DrawStyles['align-self']
+          parentStyle: RectAndStyleType['style']
+          textLines: string[]
+          border: Record<BoxDir, { style: string; color: string; width: number }>
+        },
+        'parentRect'
+      >()
     if (/flex$/.test(layout.styles.display || '')) {
       rect.isFlex = true
       if (style['flex-direction'] === 'column') {
@@ -472,24 +498,27 @@ export class Rect {
     }
     let waitComputeText = false
     if (!layout.children || !layout.children.length) {
-      if (layout.type === 'view' && style['font-size'] && style['line-height'] && !style.height && layout.content) {
+      if (layout.type === 'view' && layout.content) {
         waitComputeText = true
-        this.reactCompute.watch(
-          () => rect.contentWidth,
-          contentWidth => contentWidth !== undefined
-        ).then(async () => {
-          const { flatLines, textWidth } = await getTextLines(
-            layout.content!,
-            rect,
-            style as Parameters<typeof getTextLines>[2]
+        this.reactCompute
+          .watch(
+            () => rect.contentWidth,
+            contentWidth => contentWidth !== undefined
           )
-          rect.textLines = flatLines
-          // setWidthOrHeightByStyle(rect, textWidth, false)
-          setWidthOrHeightByStyle(rect, flatLines.length * style['line-height']!, false, true)
-        })
+          .then(async () => {
+            const { flatLines, textWidth } = await getTextLines(
+              layout.content!,
+              rect,
+              style as Parameters<typeof getTextLines>[2]
+            )
+            rect.textLines = flatLines
+            // setWidthOrHeightByStyle(rect, textWidth, false)
+            const lineHeight = computeAstFnParam(windowInfo.checkInherit(rect, 'line-height')![0])
+            setWidthOrHeightByStyle(rect, flatLines.length * lineHeight, false, true)
+          })
       }
     }
-  
+
     const isBorderBox = style['box-sizing'] === 'border-box'
     const widthObj = styleSplits.width ? styleSplits.width[0] : undefined
     if (styleSplits.width) {
@@ -581,7 +610,7 @@ export class Rect {
     } else if (!hasHeight && (!layout.children || !layout.children.length) && !waitComputeText) {
       setWidthOrHeightByStyle(rect, 0, false, true)
     }
-  
+
     return {
       rect, // 未计算padding的宽高
       style
@@ -591,12 +620,14 @@ export class Rect {
   getFlexLayout = (...args: Parameters<typeof setFlexSizeLength>) => {
     const { flexBoxLength, children } = setFlexSizeLength(...args)
     if (children.length && children[0].layout.rect.parentRect) {
-      this.reactCompute.watch(
-        () => children[0].layout.rect.parentRect.contentWidth,
-        _ => _ !== undefined
-      ).then(() => {
-        children.forEach(e => setWidthOrHeightByStyle(e.layout.rect, e.sizeLength!, !!e.borderBox, args[2]))
-      })
+      this.reactCompute
+        .watch(
+          () => children[0].layout.rect.parentRect.contentWidth,
+          _ => _ !== undefined
+        )
+        .then(() => {
+          children.forEach(e => setWidthOrHeightByStyle(e.layout.rect, e.sizeLength!, !!e.borderBox, args[2]))
+        })
     }
     return {
       flexBoxLength,
@@ -677,10 +708,12 @@ export class Rect {
           if (layout.rect.parentRect[contentDir] !== undefined) {
             innerCompute(layout.rect[contentDir])
           } else {
-            this.reactCompute.watch(
-              () => layout.rect.parentRect[contentDir],
-              _ => _ !== undefined
-            ).then(() => innerCompute(layout.rect[contentDir]))
+            this.reactCompute
+              .watch(
+                () => layout.rect.parentRect[contentDir],
+                _ => _ !== undefined
+              )
+              .then(() => innerCompute(layout.rect[contentDir]))
           }
         }
       } else {
@@ -692,7 +725,7 @@ export class Rect {
   mergeSize = async (layout: ComputedLayout, isHeight = false) => {
     const dir = isHeight ? 'height' : 'width'
     const contentDir = isHeight ? 'contentHeight' : 'contentWidth'
-  
+
     if (layout.rect.isFlex) {
       const levels: ComputedLayout[][] = []
       const positionChildren = layout.children!.filter(item => item.styles.position !== 'absolute')
@@ -1045,10 +1078,7 @@ export class Rect {
     }
   }
 
-  getRectsPropPromise = <T>(
-    rects: ComputedLayout['rect'][],
-    fn: (rect: ComputedLayout['rect']) => T | undefined
-  ) => {
+  getRectsPropPromise = <T>(rects: ComputedLayout['rect'][], fn: (rect: ComputedLayout['rect']) => T | undefined) => {
     return Promise.all(
       rects.map(rect => {
         return new Promise<T>(resolve => {
@@ -1099,7 +1129,9 @@ export class Rect {
               break
           }
           if (
-            res.find(item => (item instanceof LengthParseObj ? item.unit === '%' && item.value : item instanceof Object))
+            res.find(item =>
+              item instanceof LengthParseObj ? item.unit === '%' && item.value : item instanceof Object
+            )
           ) {
             if (rect.parentRect && rect.parentRect.contentWidth) {
               await this.reactCompute.watch(
@@ -1154,7 +1186,10 @@ export class Rect {
     computedLayout.rect = rect
     this.mergeRect(computedLayout)
     if (!parentRAT) {
-      this.reactCompute.watch(() => rect.boxHeight !== undefined && rect.boxWidth !== undefined, _ => _ === true)
+      this.reactCompute.watch(
+        () => rect.boxHeight !== undefined && rect.boxWidth !== undefined,
+        _ => _ === true
+      )
     }
     return computedLayout as ComputedLayout
   }

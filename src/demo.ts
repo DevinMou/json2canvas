@@ -22,12 +22,15 @@ const layout: DrawLayout = {
         // width: '55%',
         height: '100px',
         background:
-          'url("https://image.brightfuture360.com/static/temple/merit-box/btn-1.png") no-repeat center top calc(-15% + 10px)/cover,linear-gradient(135deg, red, orange 10%, yellow, green, blue 31%,40%,purple 50%,black calc(100% - 20px), #fff) repeat bottom 10px right/calc(100% - min(1%, 5px)) calc(calc(50% / 2) - calc(10px + 5px)) content-box border-box,#ff0000',
+          'url("https://image.brightfuture360.com/static/temple/merit-box/btn-1.png") no-repeat center top calc(-15% + 10px)/cover,linear-gradient(135deg, red, orange 10%, yellow, green, blue 31%,40%,purple 50%,black calc(100% - 20px), #fff) repeat bottom 10px right/calc(100% - min(1%, 5px)) calc(calc(50% / 2) - calc(10px + 5px)) content-box,#ff0000 padding-box content-box',
         flex: '1 2 auto',
         // 'box-sizing': 'content-box',
         'box-sizing': 'border-box',
         display: 'inline-block',
-        padding: '0 calc(5% + 20px)'
+        padding: '0 calc(3% + 5px)',
+        'border-radius': '30px',
+        'border-top': '10px solid #4335ec00',
+        'border-right': '20px solid #29de9d7d'
       }
     },
     {
@@ -90,12 +93,12 @@ const layout: DrawLayout = {
             background: 'black',
             position: 'absolute',
             bottom: 'calc(20px + 30%)',
-            transform: 'translate(100%, 0) scale(1.5)'
+            transform: 'translate(100%, -17px) scale(1.5)'
           }
         }
       ]
     },
-    {
+    /* {
       type: 'view',
       styles: {
         width: '100px',
@@ -107,9 +110,13 @@ const layout: DrawLayout = {
         // 'box-sizing': 'border-box',
         display: 'inline-block',
         'box-shadow': 'inset -20px -10px 10px 20px #000, 5px 5px 5px',
-        'align-self': 'center'
-      }
-    },
+        'align-self': 'center',
+        'font-size': '14px',
+        'line-height': '20px',
+        color: '#ffffff'
+      },
+      content: 'Json2canvas'
+    }, */
     {
       type: 'view',
       styles: {
@@ -127,14 +134,19 @@ const layout: DrawLayout = {
     {
       type: 'view',
       styles: {
-        width: '100px',
-        height: '100px',
-        background: 'orange',
+        width: '200px',
+        height: '200px',
+        background: 'orange content-box',
         flex: '0 1 auto',
         'box-sizing': 'content-box',
         margin: '10px 0 0',
         display: 'inline-block',
-        'align-self': 'center'
+        'align-self': 'center',
+        'border-top': '10px solid #fff',
+        'border-left': '20px solid transparent',
+        'border-right': '40px solid',
+        'border-radius': '50px 20px',
+        'box-shadow': '0px -90px 10px 10px #4751bb, inset 10px 10px 10px 20px #fff440'
       }
     }
   ]
@@ -298,9 +310,11 @@ window.onload = () => {
           (width as number) * dpr,
           (height as number) * dpr
         ) as unknown as SampleCanvasType<false>
+        //
         /* const offCanvas = document.createElement('canvas') as unknown as SampleCanvasType<false>
         offCanvas.width = (width as number) * dpr
         offCanvas.height = (height as number) * dpr */
+        //
         offCanvas.getContext('2d')!.scale(dpr, dpr)
         resolve(offCanvas)
       })
@@ -314,11 +328,12 @@ window.onload = () => {
     dpr: window.devicePixelRatio,
     // dpr: 1,
     createCanvas,
-    createImage: (src: string) => new Promise(resolve => {
-      const img = new Image() as SampleImageType
-      img.onload = () => resolve(img)
-      img.src = src
-    })
+    createImage: (src: string) =>
+      new Promise(resolve => {
+        const img = new Image() as SampleImageType
+        img.onload = () => resolve(img)
+        img.src = src
+      })
   })
   draw(layout).then(res => {
     const { canvas, width, height, layout } = res! || {}

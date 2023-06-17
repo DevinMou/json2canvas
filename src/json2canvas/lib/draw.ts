@@ -1,9 +1,18 @@
 import { ComputedLayout, windowInfo } from '..'
-import { AstFn, computeAstFnParam, getBorderOption, getBorderRadius, getColorByAstItem, getLengthValue, LengthParseObj, parseLengthStr } from '../util/common'
+import {
+  AstFn,
+  computeAstFnParam,
+  getBorderRadiusByAst,
+  getColorByAstItem,
+  getLengthValue,
+  LengthParseObj,
+  parseLengthStr
+} from '../util/common'
 import { MT } from '../util/sample_matrix'
-import { SpecifiedLengthTuple } from '../util/type'
+import { SpecifiedLengthTuple, UniqueStringCombinations } from '../util/type'
 import { parseBackgroundShorthand } from './background'
 import { getMarginOrPaddingValue } from './position'
+import { BoxDir, LayoutRect } from './rect'
 
 type TransformType =
   | {
@@ -191,11 +200,6 @@ const drawImage = async ({
   }
   return { width: dWidth, height: dHeight }
 }
-
-const parseShadowAst = (astItems: AstFn['params']) => {
-  
-}
-
 interface BoxShadowProps {
   blur: number
   x: number
@@ -205,103 +209,82 @@ interface BoxShadowProps {
   spread: number
 }
 
-const drawRadiusAndShadow = async ({ctx,x,y,width,height,radius,shadow}: {
+const drawRadiusAndShadow = async ({
+  ctx,
+  x,
+  y,
+  width,
+  height,
+  radius,
+  shadow,
+  border
+}: {
   ctx: SampleCanvas.RenderContext
   x: number
   y: number
   width: number
   height: number
-  radius: number[]
+  radius: Record<'x' | 'y', number>[]
   shadow: BoxShadowProps
+  border: LayoutRect['border']
 }) => {
   const bw = Math.max(shadow.blur * 5, 30)
-  const options = {
-    localRect: {
-      width,
-      height,
-      x: 0,
-      y: 0
-    },
-    shadowRect: {
-      width,
-      height,
-      x: 0,
-      y: 0
-    }
-  }
+  let computeSpread = 0
   if (shadow.inset) {
     if (shadow.spread) {
       if (shadow.spread > 0) {
-        const _spread = Math.min(Math.min(width, height) / 2, shadow.spread)
-        options.shadowRect.width -= _spread * 2
-        options.shadowRect.height -= _spread * 2
-        options.shadowRect.x += _spread
-        options.shadowRect.y += _spread
+        computeSpread = -Math.min(Math.min(width, height) / 2, shadow.spread)
       } else {
-        const _spread = -shadow.spread
-        options.shadowRect.width += _spread * 2
-        options.shadowRect.height += _spread * 2
-        options.shadowRect.x -= _spread
-        options.shadowRect.y -= _spread
+        computeSpread = -shadow.spread
       }
     }
   } else {
     if (shadow.spread) {
       if (shadow.spread < 0) {
-        const _spread = Math.min(Math.min(width, height) / 2, -shadow.spread)
-        options.shadowRect.width -= _spread * 2
-        options.shadowRect.height -= _spread * 2
-        options.shadowRect.x += _spread
-        options.shadowRect.y += _spread
+        computeSpread = -Math.min(Math.min(width, height) / 2, -shadow.spread)
       } else {
-        const _spread = shadow.spread
-        options.shadowRect.width += _spread * 2
-        options.shadowRect.height += _spread * 2
-        options.shadowRect.x -= _spread
-        options.shadowRect.y -= _spread
+        computeSpread = shadow.spread
       }
     }
-    options.localRect.x = Math.min(options.shadowRect.x + shadow.x - shadow.blur, 0)
-    options.localRect.y = Math.min(options.shadowRect.y + shadow.y - shadow.blur, 0)
-    options.localRect.width = Math.max(options.shadowRect.x + shadow.x + options.shadowRect.width + shadow.blur, width) - options.localRect.x
-    options.localRect.height = Math.max(options.shadowRect.y + shadow.y + options.shadowRect.height + shadow.blur, height) - options.localRect.y
   }
-  const localCanvas = await windowInfo.createCanvas!(true, options.localRect.width, options.localRect.height)
+  const localRect = {
+    width: shadow.inset ? width : width + computeSpread * 2 + shadow.blur * 2,
+    height: shadow.inset ? height : height + computeSpread * 2 + shadow.blur * 2
+  }
+  const localCanvas = await windowInfo.createCanvas!(true, localRect.width, localRect.height)
   /* document.body.appendChild(localCanvas as HTMLCanvasElement)
-  ;(localCanvas as HTMLCanvasElement).style.cssText = 'position: fixed;right: 50px;top: 50px' */
+  ;(localCanvas as HTMLCanvasElement).style.cssText = 'background:#ddd;position: fixed;right: 50px;top: 50px' */
   const localCtx = localCanvas.getContext('2d')
-
-  
-  const drawPath = ({dl =0, dt =0, w = width, h = height, dr = 0} = {}) => {
-    const pramas = [
-      { l: dl, t: dt, x: 1, y: 1, a: -Math.PI },
-      { l: dl + w, t: dt, x: -1, y: 1, a: -Math.PI / 2 },
-      { l: dl + w, t: dt + h, x: -1, y: -1, a: 0 },
-      { l: dl, t: dt + h, x: 1, y: -1, a: Math.PI / 2 }
-    ]
-    radius.forEach((radius, index) => {
-      const prama = pramas[index]
-      const _radius = Math.max(radius - dr, 0)
-      if (_radius) {
-        localCtx.arc(prama.l + prama.x * _radius, prama.t + prama.y * _radius, _radius, prama.a, prama.a + Math.PI / 2)
-      } else {
-      localCtx.lineTo(prama.l, prama.t)
-      }
-    })
-    localCtx.lineTo(pramas[0].l, pramas[0].t + Math.max(radius[0] - dr,0))
-  }
-
   if (shadow.inset) {
     localCtx.beginPath()
-    drawPath()
+    drawBorder({
+      ctx: localCtx,
+      radius,
+      border,
+      px: 0,
+      py: 0,
+      bw: width,
+      bh: height,
+      mode: 'in-stroke'
+    })
     localCtx.closePath()
     localCtx.clip()
     localCtx.fillStyle = shadow.color
-    localCtx.fillRect(0,0,width,height)
+    localCtx.fillRect(0, 0, width, height)
     localCtx.globalCompositeOperation = 'destination-out'
     localCtx.shadowBlur = 0
     localCtx.beginPath()
-    drawPath({dl: options.shadowRect.x + shadow.x - shadow.blur, dt: options.shadowRect.y + shadow.y - shadow.blur, w: options.shadowRect.width + 2 * shadow.blur, h: options.shadowRect.height + 2 * shadow.blur, dr: shadow.spread + shadow.blur})
+    drawBorder({
+      ctx: localCtx,
+      radius,
+      border,
+      px: shadow.x,
+      py: shadow.y,
+      bw: width,
+      bh: height,
+      spread: shadow.spread - shadow.blur,
+      mode: 'in-stroke'
+    }) // 扣掉阴影区域（含blur边界）
     localCtx.closePath()
     localCtx.save()
     localCtx.fill()
@@ -309,35 +292,57 @@ const drawRadiusAndShadow = async ({ctx,x,y,width,height,radius,shadow}: {
     localCtx.globalCompositeOperation = 'source-over'
     localCtx.clip()
 
-    
     localCtx.beginPath()
-    let {x: sx,y: sy, width: sw, height: sh} = options.shadowRect
-    
+    const sw = width + computeSpread * 2 - border.left.width - border.right.width
+    const sh = height + computeSpread * 2 - border.top.width - border.bottom.width
+    const sx = -sw - bw + computeSpread
+    const sy = shadow.y
     localCtx.shadowBlur = shadow.blur * windowInfo.dpr
-    localCtx.shadowOffsetX = (sw + bw + sx + shadow.x) * windowInfo.dpr
-    sx = -sw - bw
-    localCtx.shadowOffsetY = shadow.y * windowInfo.dpr
+    localCtx.shadowOffsetX = (-sx + shadow.x) * windowInfo.dpr
+    localCtx.shadowOffsetY = 0
     localCtx.shadowColor = shadow.color
-    const radius0 = Math.max(radius[0] - shadow.spread, 0)
-    localCtx.moveTo(sx- bw,sy + radius0)
-    drawPath({dl: sx, dt: sy, w: sw, h: sh, dr: shadow.spread})
-    localCtx.lineTo(sx - bw, sy + radius0)
-    localCtx.lineTo(sx - bw, sy + sh + bw)
-    localCtx.lineTo(sx + sw + bw, sy + sh + bw)
-    localCtx.lineTo(sx + sw + bw, sy - bw)
-    localCtx.lineTo(sx - bw, sy - bw)
+    const radius0 = Math.max(radius[0].y - shadow.spread, 0)
+    const fx = sx + border.left.width - computeSpread
+    const fy = sy + border.top.width - computeSpread
+    localCtx.moveTo(fx - bw, fy + radius0)
+    drawBorder({
+      ctx: localCtx,
+      radius,
+      border,
+      px: sx,
+      py: sy,
+      bw: width,
+      bh: height,
+      spread: shadow.spread,
+      mode: 'in-stroke'
+    })
+    localCtx.lineTo(fx - bw, fy + radius0)
+    localCtx.lineTo(fx - bw, fy + sh + bw)
+    localCtx.lineTo(fx + sw + bw, fy + sh + bw)
+    localCtx.lineTo(fx + sw + bw, fy - bw)
+    localCtx.lineTo(fx - bw, fy - bw)
     localCtx.closePath()
     localCtx.fillStyle = shadow.color
     localCtx.fill()
-    
+    ctx.drawImage(localCanvas, x, y, localRect.width, localRect.height)
   } else {
     localCtx.fillStyle = shadow.color
     localCtx.shadowBlur = shadow.blur * windowInfo.dpr
-    localCtx.shadowOffsetX = shadow.x * windowInfo.dpr
-    localCtx.shadowOffsetY = shadow.y * windowInfo.dpr
+    localCtx.shadowOffsetX = (width + computeSpread * 2 + shadow.blur) * windowInfo.dpr
+    localCtx.shadowOffsetY = 0
     localCtx.shadowColor = shadow.color
     localCtx.beginPath()
-    drawPath({dl: -options.localRect.x + options.shadowRect.x, dt: -options.localRect.y + options.shadowRect.y, w: options.shadowRect.width, h: options.shadowRect.height})
+    drawBorder({
+      ctx: localCtx,
+      radius,
+      border,
+      px: -width - computeSpread,
+      py: shadow.blur + computeSpread,
+      bw: width,
+      bh: height,
+      spread: shadow.spread,
+      mode: 'out-stroke'
+    })
     localCtx.closePath()
     localCtx.fill()
     localCtx.globalCompositeOperation = 'destination-out'
@@ -345,13 +350,28 @@ const drawRadiusAndShadow = async ({ctx,x,y,width,height,radius,shadow}: {
     localCtx.shadowOffsetX = 0
     localCtx.shadowOffsetY = 0
     localCtx.beginPath()
-    drawPath({dl: -options.localRect.x, dt: -options.localRect.y})
+    drawBorder({
+      ctx: localCtx,
+      radius,
+      border,
+      px: shadow.blur + computeSpread - shadow.x,
+      py: shadow.blur + computeSpread - shadow.y,
+      bw: width,
+      bh: height,
+      mode: 'out-stroke'
+    })
     localCtx.closePath()
     localCtx.fill()
     localCtx.globalCompositeOperation = 'source-over'
+    ctx.drawImage(
+      localCanvas,
+      x + shadow.x - shadow.blur - computeSpread,
+      y + shadow.y - shadow.blur - computeSpread,
+      localRect.width,
+      localRect.height
+    )
   }
-  
-  ctx.drawImage(localCanvas, x + options.localRect.x , y + options.localRect.y, options.localRect.width, options.localRect.height)
+
   // localCtx.fillRect(-bw,radius[0],bw,height - radius[0] - radius[3])
   // ctx.drawImage(localCanvas, x, y)
 }
@@ -374,49 +394,49 @@ export const drawItem = async (
     parentLeft = 0
     parentTop = 0
   }
-  const borderRadius = getBorderRadius(layout.styles['border-radius'])
+  // const borderRadius = getBorderRadius(layout.styles['border-radius'])
+  const borderRadius = getBorderRadiusByAst(layout.rect)
   if (layout.type === 'view') {
     if (layout.styles.background) {
       const bgWidth = layout.rect.boxWidth || 0
       const bgHeight = layout.rect.boxHeight || 0
-      
-        const bgCanvas = await windowInfo.createCanvas!(true, layout.rect.boxWidth!, layout.rect.boxHeight)
-        const bgCtx = bgCanvas!.getContext('2d')
-        if (layout.styles['border-radius']) {
-          const width = bgWidth
-          const height = bgHeight
-          bgCtx.beginPath()
-          const pramas = [
-            { l: 0, t: 0, x: 1, y: 1, a: -Math.PI },
-            { l: width, t: 0, x: -1, y: 1, a: -Math.PI / 2 },
-            { l: width, t: height, x: -1, y: -1, a: 0 },
-            { l: 0, t: height, x: 1, y: -1, a: Math.PI / 2 }
-          ]
-          borderRadius.forEach((radius, index) => {
-            const prama = pramas[index]
-            if (radius) {
-              bgCtx.arc(prama.l + prama.x * radius, prama.t + prama.y * radius, radius, prama.a, prama.a + Math.PI / 2)
-            } else {
-              bgCtx.lineTo(prama.l, prama.t)
-            }
+
+      const bgCanvas = await windowInfo.createCanvas!(true, layout.rect.boxWidth!, layout.rect.boxHeight)
+      const bgCtx = bgCanvas!.getContext('2d')
+      /* document.body.appendChild(bgCanvas as HTMLCanvasElement)
+      ;(bgCanvas as HTMLCanvasElement).style.cssText = 'background:#ddd;position: fixed;right: 10px;top: 10px' */
+      /* if (layout.styles['border-radius']) {
+        bgCtx.beginPath()
+        drawBorder({
+          ctx: bgCtx,
+          radius: borderRadius,
+          border: layout.rect.border,
+          px: 0,
+          py: 0,
+          bw: bgWidth,
+          bh: bgHeight,
+          mode: 'out-stroke'
+        })
+        bgCtx.closePath()
+        bgCtx.clip()
+      } */
+      await parseBackgroundShorthand(bgCanvas, layout.styles.background, layout.rect, borderRadius)
+      if (bgCanvas && bgCanvas.width && bgCanvas.height) {
+        if (Object.values(layout.rect.border).find(e => e.width)) {
+          // ???
+          drawBorder({
+            ctx: bgCtx,
+            radius: borderRadius,
+            border: layout.rect.border,
+            px: 0,
+            py: 0,
+            bw: bgWidth,
+            bh: bgHeight,
+            mode: 'fill'
           })
-          bgCtx.closePath()
-          bgCtx.clip()
         }
-        await parseBackgroundShorthand(bgCanvas, layout.styles.background, layout.rect)
-        if (bgCanvas && bgCanvas.width && bgCanvas.height) {
-          await ctx.drawImage(bgCanvas, parentLeft, parentTop, bgWidth, bgHeight)
-          if (layout.styles.border) {
-            // ???
-            const borderArr = getBorderOption(layout.styles.border)
-            if (borderArr) {
-              bgCtx.lineWidth = borderArr[0]
-              bgCtx.strokeStyle = borderArr[2]
-              bgCtx.stroke()
-            }
-          }
-        }
-      
+        await ctx.drawImage(bgCanvas, parentLeft, parentTop, bgWidth, bgHeight)
+      }
     }
   } else if (layout.type === 'img' && layout.content) {
     const bgWidth =
@@ -432,22 +452,16 @@ export const drawItem = async (
     bgCtx.scale(windowInfo.dpr, windowInfo.dpr)
 
     if (layout.styles['border-radius']) {
-      const width = bgWidth
-      const height = bgHeight
       bgCtx.beginPath()
-      const pramas = [
-        { l: 0, t: 0, x: 1, y: 1, a: -Math.PI },
-        { l: width, t: 0, x: -1, y: 1, a: -Math.PI / 2 },
-        { l: width, t: height, x: -1, y: -1, a: 0 },
-        { l: 0, t: height, x: 1, y: -1, a: Math.PI / 2 }
-      ]
-      borderRadius.forEach((radius, index) => {
-        const prama = pramas[index]
-        if (radius) {
-          bgCtx.arc(prama.l + prama.x * radius, prama.t + prama.y * radius, radius, prama.a, prama.a + Math.PI / 2)
-        } else {
-          bgCtx.lineTo(prama.l, prama.t)
-        }
+      drawBorder({
+        ctx: bgCtx,
+        radius: borderRadius,
+        border: layout.rect.border,
+        px: 0,
+        py: 0,
+        bw: bgWidth,
+        bh: bgHeight,
+        mode: 'out-stroke'
       })
       bgCtx.closePath()
       bgCtx.clip()
@@ -480,11 +494,12 @@ export const drawItem = async (
   }
 
   if (layout.styles['box-shadow']) {
+    const defaultColor = getColorByAstItem(windowInfo.checkInherit(layout.rect, 'color')![0]) || 'rgba(0, 0, 0, 1)'
     let currentItem: BoxShadowProps = {
       x: 0,
       y: 0,
       blur: 0,
-      color: 'rgba(0, 0, 0, 1)',
+      color: defaultColor,
       spread: 0,
       inset: false
     }
@@ -538,7 +553,7 @@ export const drawItem = async (
             x: 0,
             y: 0,
             blur: 0,
-            color: 'rgba(0, 0, 0, 1)',
+            color: defaultColor,
             spread: 0,
             inset: false
           }
@@ -555,7 +570,8 @@ export const drawItem = async (
           width: layout.rect.boxWidth!,
           height: layout.rect.boxHeight!,
           radius: borderRadius,
-          shadow: shadowItem
+          shadow: shadowItem,
+          border: layout.rect.border
         })
       }
     }
@@ -566,14 +582,14 @@ export const drawItem = async (
   }
 
   if (layout.children && layout.children.length) {
-    const contentWidth =
+    /* const contentWidth =
       (layout.rect.boxWidth || 0) +
       getMarginOrPaddingValue(layout.rect, 'padding-right') +
       getMarginOrPaddingValue(layout.rect, 'padding-left')
     const contentHeight =
       layout.rect.boxHeight! +
       getMarginOrPaddingValue(layout.rect, 'padding-top') +
-      getMarginOrPaddingValue(layout.rect, 'padding-bottom')
+      getMarginOrPaddingValue(layout.rect, 'padding-bottom') */
     const normalChildren: ComputedLayout[] = []
     const transformChildren: ComputedLayout[] = []
     const zIndexChildren: ComputedLayout[] = []
@@ -702,5 +718,317 @@ export const drawItem = async (
       layout.rect.boxHeight! / windowInfo.dpr
     )
     parentCtx.setTransform(windowInfo.dpr, 0, 0, windowInfo.dpr, 0, 0)
+  }
+}
+
+const getSplitAngle = (
+  rx: number,
+  ry: number,
+  wx: number,
+  wy: number,
+  px: number,
+  py: number,
+  fy: 1 | -1 = 1,
+  fx: 1 | -1 = 1
+): number | null => {
+  const res: [number, number][] = []
+  const A = wy * wy * rx * rx + wx * wx * ry * ry
+  const B = -2 * (wy * px - wx * py) * wy * rx * rx
+  const C = Math.pow(wy * px - wx * py, 2) * rx * rx - wx * wx * rx * rx * ry * ry
+  const isInFirstQuadrant = (x: number, y: number): boolean => {
+    return x >= 0 && y >= 0
+  }
+
+  const getY = (x: number) => {
+    if (wx) {
+      return (wy * (x - rx - wx)) / wx + ry + wy
+    } else {
+      return Math.sqrt((1 - Math.pow(x / rx, 2)) * ry * ry)
+    }
+  }
+
+  // 求解二元二次方程
+  const delta = B * B - 4 * A * C
+  if (delta < 0) {
+    return null // 无实数解
+  } else if (delta === 0) {
+    const x = -B / (2 * A)
+    const y = getY(x)
+    if (isInFirstQuadrant(x, y)) {
+      res[0] = [y, x]
+    } else {
+      return null
+    }
+  } else {
+    const x1 = (-B + Math.sqrt(delta)) / (2 * A)
+    const x2 = (-B - Math.sqrt(delta)) / (2 * A)
+    const y1 = getY(x1)
+    const y2 = getY(x2)
+    if (isInFirstQuadrant(x1, y1)) {
+      res.push([y1, x1])
+    }
+    if (isInFirstQuadrant(x2, y2)) {
+      res.push([y2, x2])
+    }
+  }
+  return res.length ? res.map(e => Math.atan2(e[0] * fy, e[1] * fx))[0] : null
+}
+
+type BorderItem = {
+  width: number
+  color: string
+}
+export const drawBorder = ({
+  ctx,
+  radius,
+  border,
+  px = 0,
+  py = 0,
+  bw = 0,
+  bh = 0,
+  mode = 'fill',
+  spread = 0
+}: {
+  ctx: SampleCanvas.RenderContext
+  px: number
+  py: number
+  bw: number
+  bh: number
+  spread?: number
+  radius: Record<'x' | 'y', number>[]
+  border: Record<BoxDir, BorderItem>
+  mode: 'fill' | 'in-stroke' | 'out-stroke'
+}) => {
+  if (!ctx) {
+    return
+  }
+  const borderDirRelation: Record<BoxDir, { prev: BoxDir; next: BoxDir }> = {
+    top: {
+      prev: 'left',
+      next: 'right'
+    },
+    right: {
+      prev: 'top',
+      next: 'bottom'
+    },
+    bottom: {
+      prev: 'right',
+      next: 'left'
+    },
+    left: {
+      prev: 'bottom',
+      next: 'top'
+    }
+  }
+  type OptionItem = {
+    arc: {
+      x: number
+      y: number
+      angles: number[]
+      outRadius: {
+        x: number
+        y: number
+        angle: number | null
+      }
+      inRadius: {
+        x: number
+        y: number
+        angle: number | null
+      }
+      outPoint: Record<'x' | 'y', number>
+      inPoint: Record<'x' | 'y', number>
+    }
+  }
+  const options: Partial<Record<`${BoxDir}-${BoxDir}`, OptionItem>> = {}
+  const dirArr = [
+    ['left', -1, -1],
+    ['top', -1, 1],
+    ['right', 1, 1],
+    ['bottom', 1, -1]
+  ] as const
+  let _spread = 0
+  if (mode === 'in-stroke') {
+    if (spread > 0) {
+      _spread = -Math.min(
+        (bw - border.left.width - border.right.width) / 2,
+        (bh - border.top.width - border.bottom.width) / 2,
+        spread
+      )
+    } else {
+      _spread = -spread
+    }
+  } else if (mode === 'out-stroke') {
+    if (spread > 0) {
+      _spread = spread
+    } else {
+      _spread = -Math.min(bw / 2, bh / 2, -spread)
+    }
+  }
+  dirArr.forEach((item, i) => {
+    const nk = i === 3 ? 'left' : dirArr[i + 1][0]
+    const [k, coey, coex] = item
+    const xWidth = i % 2 ? border[nk].width : border[k].width
+    const yWidth = i % 2 ? border[k].width : border[nk].width
+    const arc: OptionItem['arc'] = {
+      x: px + (coex > 0 ? bw - radius[i].x : radius[i].x),
+      y: py + (coey > 0 ? bh - radius[i].y : radius[i].y),
+      angles: [-Math.PI + (Math.PI / 2) * i, -Math.PI / 2 + (Math.PI / 2) * i],
+      outRadius: {
+        x: radius[i].x + _spread,
+        y: radius[i].y + _spread,
+        angle: null
+      },
+      inRadius: {
+        x: radius[i].x - xWidth + _spread,
+        y: radius[i].y - yWidth + _spread,
+        angle: null
+      },
+      outPoint: {
+        x: px + (coex > 0 ? bw : 0) + coex * _spread,
+        y: py + (coey > 0 ? bh : 0) + coey * _spread
+      },
+      inPoint: {
+        x: px + (coex > 0 ? bw - xWidth : xWidth) + coex * _spread,
+        y: py + (coey > 0 ? bh - yWidth : yWidth) + coey * _spread
+      }
+    }
+    if (arc.outRadius.x > 0 && arc.outRadius.y > 0) {
+      arc.outRadius.angle = getSplitAngle(
+        arc.outRadius.x,
+        arc.outRadius.y,
+        xWidth,
+        yWidth,
+        radius[i].x,
+        radius[i].y,
+        coey,
+        coex
+      )
+    }
+    if (arc.inRadius.x > 0 && arc.inRadius.y > 0) {
+      arc.inRadius.angle = getSplitAngle(
+        arc.inRadius.x,
+        arc.inRadius.y,
+        xWidth,
+        yWidth,
+        radius[i].x,
+        radius[i].y,
+        coey,
+        coex
+      )
+    }
+    options[`${k}-${nk}`] = { arc }
+  })
+  const borderIndexs = ['top', 'right', 'bottom', 'left'] as const
+  for (const k of borderIndexs) {
+    const borderItem = border[k]
+    const dirRelation = borderDirRelation[k]
+    const prevOption = options[`${dirRelation.prev}-${k}`]!
+    const nextOption = options[`${k}-${dirRelation.next}`]!
+    switch (mode) {
+      case 'fill':
+        ctx.beginPath()
+        if (
+          prevOption.arc.outRadius.x > 0 &&
+          prevOption.arc.outRadius.y > 0 &&
+          prevOption.arc.outRadius.angle !== null
+        ) {
+          ctx.ellipse(
+            prevOption.arc.x,
+            prevOption.arc.y,
+            prevOption.arc.outRadius.x,
+            prevOption.arc.outRadius.y,
+            0,
+            prevOption.arc.outRadius.angle,
+            prevOption.arc.angles[1]
+          )
+        } else {
+          ctx.lineTo(prevOption.arc.outPoint.x, prevOption.arc.outPoint.y)
+        }
+        if (
+          nextOption.arc.outRadius.x > 0 &&
+          nextOption.arc.outRadius.y > 0 &&
+          nextOption.arc.outRadius.angle !== null
+        ) {
+          ctx.ellipse(
+            nextOption.arc.x,
+            nextOption.arc.y,
+            nextOption.arc.outRadius.x,
+            nextOption.arc.outRadius.y,
+            0,
+            nextOption.arc.angles[0],
+            nextOption.arc.outRadius.angle
+          )
+        } else {
+          ctx.lineTo(nextOption.arc.outPoint.x, nextOption.arc.outPoint.y)
+        }
+        if (nextOption.arc.inRadius.x > 0 && nextOption.arc.inRadius.y > 0 && nextOption.arc.inRadius.angle !== null) {
+          ctx.ellipse(
+            nextOption.arc.x,
+            nextOption.arc.y,
+            nextOption.arc.inRadius.x,
+            nextOption.arc.inRadius.y,
+            0,
+            nextOption.arc.inRadius.angle,
+            nextOption.arc.angles[0],
+            true
+          )
+        } else {
+          ctx.lineTo(nextOption.arc.inPoint.x, nextOption.arc.inPoint.y)
+        }
+        if (prevOption.arc.inRadius.x > 0 && prevOption.arc.inRadius.y > 0 && prevOption.arc.inRadius.angle !== null) {
+          ctx.ellipse(
+            prevOption.arc.x,
+            prevOption.arc.y,
+            prevOption.arc.inRadius.x,
+            prevOption.arc.inRadius.y,
+            0,
+            prevOption.arc.angles[1],
+            prevOption.arc.inRadius.angle,
+            true
+          )
+        } else {
+          ctx.lineTo(prevOption.arc.inPoint.x, prevOption.arc.inPoint.y)
+        }
+        ctx.closePath()
+        ctx.fillStyle = borderItem.color
+        ctx.fill()
+        break
+      case 'in-stroke':
+        if (prevOption.arc.inRadius.x > 0 && prevOption.arc.inRadius.y > 0) {
+          ctx.ellipse(
+            prevOption.arc.x,
+            prevOption.arc.y,
+            prevOption.arc.inRadius.x,
+            prevOption.arc.inRadius.y,
+            0,
+            prevOption.arc.angles[0],
+            prevOption.arc.angles[1]
+          )
+        } else {
+          ctx.lineTo(prevOption.arc.inPoint.x, prevOption.arc.inPoint.y)
+        }
+        if (k === 'left') {
+          ctx.lineTo(nextOption.arc.inPoint.x, nextOption.arc.inPoint.y + nextOption.arc.inRadius.y)
+        }
+        break
+      case 'out-stroke':
+        if (prevOption.arc.outRadius.x > 0 && prevOption.arc.outRadius.y > 0) {
+          ctx.ellipse(
+            prevOption.arc.x,
+            prevOption.arc.y,
+            prevOption.arc.outRadius.x,
+            prevOption.arc.outRadius.y,
+            0,
+            prevOption.arc.angles[0],
+            prevOption.arc.angles[1]
+          )
+        } else {
+          ctx.lineTo(prevOption.arc.outPoint.x, prevOption.arc.outPoint.y)
+        }
+        if (k === 'left') {
+          ctx.lineTo(nextOption.arc.outPoint.x, nextOption.arc.outPoint.y + nextOption.arc.outRadius.y)
+        }
+        break
+    }
   }
 }

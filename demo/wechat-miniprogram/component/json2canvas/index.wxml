@@ -1,0 +1,4 @@
+<!--component/json2canvas/index.wxml-->
+<view class="hidden-canvas">
+  <canvas class="hidden-canvas-item" id="{{item.id}}" style="width: {{item.width}}px;height: {{item.height}}px;" wx:for="{{canvas}}" wx:key="id" type="2d"></canvas>
+</view>

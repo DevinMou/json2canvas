@@ -40,3 +40,16 @@ type ReactObj<T, D extends boolean> = D extends true
     ? MergeDefaultType<never, T>
     : T
   : T
+
+export type UniqueStringCombinations<T extends string, C extends string = '-'> = ((a: T, b: T) => void) extends (
+  a: infer X,
+  b: infer Y
+) => void
+  ? X extends T
+    ? Y extends T
+      ? X extends Y
+        ? never
+        : `${X}${C}${Y}`
+      : never
+    : never
+  : never

@@ -2,14 +2,11 @@ import { SpecifiedLengthTuple } from '../../util/type'
 import { SampleImageType, windowInfo } from '../..'
 import { LayoutRect } from '../rect'
 import {
-  colorKeyWordRGB,
   compareObject,
   getLengthValue,
-  hex2rgba,
   isAngleStr,
   isNonNullable,
   lengthReg,
-  reg_hex,
   parseStr2Ast,
   AstFn,
   parseAstItem2AstFnAndStr,
@@ -19,9 +16,16 @@ import {
 } from '../../util/common'
 import { ReactCompute } from '../../util/react_compute'
 import { getMarginOrPaddingValue } from '../position'
+import { drawBorder } from '../draw'
 
-export const parseBackgroundShorthand = async (bgCanvas: SampleCanvas.Canvas, background: string, rect: LayoutRect) => {
+export const parseBackgroundShorthand = async (
+  bgCanvas: SampleCanvas.Canvas,
+  background: string,
+  rect: LayoutRect,
+  radius: Record<'x' | 'y', number>[]
+) => {
   const reactCompute = new ReactCompute()
+  const hasRadius = !!radius.find(e => e.x || e.y)
   const splitArr = parseStr2Ast(background)
     .children?.filter(item => item.type !== 'space')
     .map(item => {
@@ -141,28 +145,32 @@ export const parseBackgroundShorthand = async (bgCanvas: SampleCanvas.Canvas, ba
   }
   const backgroundCtx = bgCanvas.getContext('2d')
   for (const item of tempDistArr.reverse()) {
-    const backgroundItem = reactCompute.reactive<BackgroundItem>(
-      {
-        clip: 'border-box',
-        origin: 'padding-box',
-        position: {
-          x: 0,
-          y: 0
-        }
-      },
-      true
-    ).value()
-    if (item.image) {
-      backgroundItem.image = reactCompute.reactive({
-        type: item.image.type,
-        params: item.image.params,
-        el: undefined
-      }).value<
-        never,
+    const backgroundItem = reactCompute
+      .reactive<BackgroundItem>(
         {
-          el: SampleImageType
-        }
-      >()
+          clip: 'border-box',
+          origin: 'padding-box',
+          position: {
+            x: 0,
+            y: 0
+          }
+        },
+        true
+      )
+      .value()
+    if (item.image) {
+      backgroundItem.image = reactCompute
+        .reactive({
+          type: item.image.type,
+          params: item.image.params,
+          el: undefined
+        })
+        .value<
+          never,
+          {
+            el: SampleImageType
+          }
+        >()
       if (item.image.type === 'url') {
         windowInfo.createImage!(item.image.params.join('')).then(el => {
           backgroundItem.image!.el = el
@@ -176,74 +184,69 @@ export const parseBackgroundShorthand = async (bgCanvas: SampleCanvas.Canvas, ba
         backgroundItem.clip = item.clip_origin[1]
       }
     }
+    const marginDist = {
+      'border-box': [0, 0],
+      'padding-box': [rect.border.left.width, rect.border.top.width],
+      'content-box': [
+        getMarginOrPaddingValue(rect, 'padding-left') + rect.border.left.width,
+        getMarginOrPaddingValue(rect, 'padding-top') + rect.border.top.width,
+        getMarginOrPaddingValue(rect, 'padding-right') + rect.border.right.width,
+        getMarginOrPaddingValue(rect, 'padding-bottom') + rect.border.bottom.width
+      ]
+    } as const
+    const backgroundRect = {
+      clip: {
+        width:
+          backgroundItem.clip === 'content-box'
+            ? rect.contentWidth!
+            : backgroundItem.clip === 'padding-box'
+            ? rect.contentWidth! + getMarginOrPaddingValue(rect, 'padding-width')
+            : rect.boxWidth!,
+        height:
+          backgroundItem.clip === 'content-box'
+            ? rect.contentHeight!
+            : backgroundItem.clip === 'padding-box'
+            ? rect.contentHeight! + getMarginOrPaddingValue(rect, 'padding-height')
+            : rect.boxHeight!,
+        top: marginDist[backgroundItem.clip!][1],
+        left: marginDist[backgroundItem.clip!][0]
+      },
+      origin: {
+        width:
+          backgroundItem.origin === 'content-box'
+            ? rect.contentWidth!
+            : backgroundItem.origin === 'padding-box'
+            ? rect.contentWidth! + getMarginOrPaddingValue(rect, 'padding-width')
+            : rect.boxWidth!,
+        height:
+          backgroundItem.origin === 'content-box'
+            ? rect.contentHeight!
+            : backgroundItem.origin === 'padding-box'
+            ? rect.contentHeight! + getMarginOrPaddingValue(rect, 'padding-height')
+            : rect.boxHeight!,
+        top: marginDist[backgroundItem.origin!][1] - marginDist[backgroundItem.clip!][1],
+        left: marginDist[backgroundItem.origin!][0] - marginDist[backgroundItem.clip!][0]
+      },
+      image: {
+        width: 0,
+        height: 0,
+        top: 0,
+        left: 0,
+        widthAuto: false,
+        heightAuto: false,
+        fit: ''
+      }
+    }
+    const clipCanvas = await windowInfo.createCanvas!(true, backgroundRect.clip.width, backgroundRect.clip.height)
+    const clipCtx = clipCanvas.getContext('2d')
     if (item.color) {
       const color = getColorByAstItem(item.color)
       if (color) {
-        backgroundCtx.fillStyle = color
-        backgroundCtx.fillRect(0, 0, rect.boxWidth!, rect.boxHeight!)
+        clipCtx.fillStyle = color
+        clipCtx.fillRect(0, 0, backgroundRect.clip.width, backgroundRect.clip.height)
       }
     } else if (item.image) {
       if (['url', 'linear-gradient'].includes(item.image.type)) {
-        const backgroundRect = {
-          clip: {
-            width: 0,
-            height: 0,
-            top: 0,
-            left: 0
-          },
-          origin: {
-            width: 0,
-            height: 0,
-            top: 0,
-            left: 0
-          },
-          image: {
-            width: 0,
-            height: 0,
-            top: 0,
-            left: 0,
-            widthAuto: false,
-            heightAuto: false,
-            fit: ''
-          }
-        }
-        backgroundRect.origin.width =
-          backgroundItem.origin === 'content-box'
-            ? rect.contentWidth!
-            : backgroundItem.origin === 'padding-box'
-            ? rect.contentWidth! + getMarginOrPaddingValue(rect, 'padding-width')
-            : rect.boxWidth!
-        backgroundRect.origin.height =
-          backgroundItem.origin === 'content-box'
-            ? rect.contentHeight!
-            : backgroundItem.origin === 'padding-box'
-            ? rect.contentHeight! + getMarginOrPaddingValue(rect, 'padding-height')
-            : rect.boxHeight!
-        backgroundRect.clip.width =
-          backgroundItem.clip === 'content-box'
-            ? rect.contentWidth!
-            : backgroundItem.clip === 'padding-box'
-            ? rect.contentWidth! + getMarginOrPaddingValue(rect, 'padding-width')
-            : rect.boxWidth!
-        backgroundRect.clip.height =
-          backgroundItem.clip === 'content-box'
-            ? rect.contentHeight!
-            : backgroundItem.clip === 'padding-box'
-            ? rect.contentHeight! + getMarginOrPaddingValue(rect, 'padding-height')
-            : rect.boxHeight!
-        const marginDist = {
-          'border-box': [0, 0],
-          'padding-box': [rect.border[3], rect.border[0]],
-          'content-box': [
-            getMarginOrPaddingValue(rect, 'padding-left') + rect.border[3],
-            getMarginOrPaddingValue(rect, 'padding-top') + rect.border[0]
-          ]
-        } as const
-        backgroundRect.origin.left = marginDist[backgroundItem.origin!][0] - marginDist[backgroundItem.clip!][0]
-        backgroundRect.origin.top = marginDist[backgroundItem.origin!][1] - marginDist[backgroundItem.clip!][1]
-        backgroundRect.clip.left = marginDist[backgroundItem.clip!][0]
-        backgroundRect.clip.top = marginDist[backgroundItem.clip!][1]
-
         if (item.size && item.size.length) {
           if (typeof item.size[0] === 'string') {
             if (lengthReg.test(item.size[0])) {
@@ -285,8 +288,7 @@ export const parseBackgroundShorthand = async (bgCanvas: SampleCanvas.Canvas, ba
           backgroundRect.image.widthAuto = true
           backgroundRect.image.heightAuto = true
         }
-        const clipCanvas = await windowInfo.createCanvas!(true, backgroundRect.clip.width, backgroundRect.clip.height)
-        const clipCtx = clipCanvas.getContext('2d')
+
         if (item.image!.type === 'url') {
           await reactCompute.watch(
             () => backgroundItem.image && backgroundItem.image.el,
@@ -803,16 +805,41 @@ export const parseBackgroundShorthand = async (bgCanvas: SampleCanvas.Canvas, ba
             await clipCtx.drawImage(backgroundItem.image!.el!, area.x, area.y, area.w, area.h)
           }
         }
-
-        await backgroundCtx.drawImage(
-          clipCanvas,
-          backgroundRect.clip.left,
-          backgroundRect.clip.top,
-          backgroundRect.clip.width,
-          backgroundRect.clip.height
-        )
       }
     }
+    if (hasRadius) {
+      clipCtx.globalCompositeOperation = 'destination-in'
+      clipCtx.beginPath()
+      const _border =
+        backgroundItem.clip === 'content-box'
+          ? {
+              left: { ...rect.border.left, width: marginDist['content-box'][0] },
+              top: { ...rect.border.top, width: marginDist['content-box'][1] },
+              right: { ...rect.border.right, width: marginDist['content-box'][2] },
+              bottom: { ...rect.border.bottom, width: marginDist['content-box'][3] }
+            }
+          : rect.border
+      drawBorder({
+        ctx: clipCtx,
+        radius,
+        border: _border,
+        px: -marginDist[backgroundItem.clip][0],
+        py: -marginDist[backgroundItem.clip][1],
+        bw: rect.boxWidth!,
+        bh: rect.boxHeight!,
+        mode: backgroundItem.clip === 'border-box' ? 'out-stroke' : 'in-stroke'
+      })
+      clipCtx.closePath()
+      clipCtx.fillStyle = '#000000'
+      clipCtx.fill()
+    }
+    await backgroundCtx.drawImage(
+      clipCanvas,
+      backgroundRect.clip.left,
+      backgroundRect.clip.top,
+      backgroundRect.clip.width,
+      backgroundRect.clip.height
+    )
   }
   return bgCanvas
 }

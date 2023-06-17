@@ -1,0 +1,17 @@
+/* component/canvas/index.wxss */
+.hidden-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 10000;
+  width: 1rpx;
+  height: 1rpx;
+  pointer-events: none;
+  opacity: 0;
+  overflow: hidden;
+
+  .hidden-canvas-item {
+    transform: translate(-100%, -100%);
+    position: absolute;
+  }
+}

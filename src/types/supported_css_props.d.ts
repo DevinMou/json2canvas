@@ -33,10 +33,10 @@ interface DrawStyles {
   margin: NOS
   padding: NOS
   border: NOS
-  // 'border-top': NOS
-  // 'border-left': NOS
-  // 'border-right': NOS
-  // 'border-bottom': NOS
+  'border-top': NOS
+  'border-left': NOS
+  'border-right': NOS
+  'border-bottom': NOS
   'transform-origin': NOS
   transform: string
 }

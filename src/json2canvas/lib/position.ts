@@ -76,8 +76,10 @@ export const getLayoutPosition = (layout: ComputedLayout, moveList?: MoveLayoutI
       flexCrossRestLength = restLength / flexCrossFixedArr.length
     }
     let mainFixedLength = 0
+    let preMarginBottom: null | number = null
     layout.children.forEach(item => {
       const marginTop = getMarginOrPaddingValue(item.rect, 'margin-top')
+      const marginBottom = getMarginOrPaddingValue(item.rect, 'margin-bottom')
       // const marginBottom = item.rect.margin[2]
       if (layout.rect.isFlex) {
         const newLine = item.rect.crossIndex !== tempCrossIndex
@@ -265,6 +267,9 @@ export const getLayoutPosition = (layout: ComputedLayout, moveList?: MoveLayoutI
               item.rect.boxHeight! + getMarginOrPaddingValue(item.rect, 'margin-height')
             )
           }
+          if (!item.rect.isInline && preMarginBottom !== null) {
+            position.top -= Math.min(preMarginBottom, marginTop)
+          }
           item.rect.top =
             position.top +
             marginTop +
@@ -280,6 +285,11 @@ export const getLayoutPosition = (layout: ComputedLayout, moveList?: MoveLayoutI
             item.rect.left = position.left + getMarginOrPaddingValue(item.rect, 'margin-left')
           }
           tempMainLength = getMarginOrPaddingValue(item.rect, 'margin-left') + item.rect.boxWidth!
+          if (item.rect.isInline) {
+            preMarginBottom = null
+          } else {
+            preMarginBottom = marginBottom
+          }
         }
       }
       getLayoutPosition(item, moveList)

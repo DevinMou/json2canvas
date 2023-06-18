@@ -179,7 +179,7 @@ const baseInheritMap: BaseInheritMap = {
     }
   }
 }
-export const windowInfo: Record<string, unknown> & {
+type WindowInfo = {
   dpr: number
   unit: {
     [k: string]: number
@@ -193,7 +193,8 @@ export const windowInfo: Record<string, unknown> & {
   drawTexts: (layout: ComputedLayout, ctx: SampleCanvas.RenderContext, parentTop: number, parentLeft: number) => void
   baseInheritMap: BaseInheritMap
   checkInherit: typeof checkInherit
-} = {
+}
+export const windowInfo: Record<string, any> & WindowInfo = {
   dpr: 1,
   unit: {
     px: 1,
@@ -204,10 +205,16 @@ export const windowInfo: Record<string, unknown> & {
   baseInheritMap,
   checkInherit
 }
-export const initWindow = (_windowInfo: Partial<typeof windowInfo>) => {
-  for (const k in _windowInfo) {
-    windowInfo[k] = _windowInfo[k]
-  }
+export const initWindow = (_windowInfo: Partial<WindowInfo>) => {
+  Object.assign(
+    windowInfo,
+    Object.fromEntries(
+      Object.entries(_windowInfo).map(e => [
+        e[0],
+        typeof e[1] === 'object' && e[1] ? Object.assign(windowInfo[e[0]], e[1]) : e[1]
+      ])
+    )
+  )
 }
 
 export interface DrawLayout<T extends 'view' | 'img' = 'view' | 'img'> {

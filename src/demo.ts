@@ -276,6 +276,34 @@ const layout2: DrawLayout = {
     }
   ]
 }
+const layout3: DrawLayout = {
+  type: 'view',
+  styles: {
+    padding: '250rpx 50rpx 50rpx',
+    display: 'inline-block',
+    background: 'pink'
+  },
+  children: [
+    {
+      type: 'view',
+      styles: {
+        width: '400rpx',
+        height: '400rpx',
+        background: 'orange content-box',
+        flex: '0 1 auto',
+        'box-sizing': 'content-box',
+        margin: '20rpx 0 0',
+        display: 'inline-block',
+        'align-self': 'center',
+        'border-top': '20rpx solid #fff',
+        'border-left': '40rpx solid transparent',
+        'border-right': '80rpx solid',
+        'border-radius': '100rpx 40rpx',
+        'box-shadow': '0rpx -180rpx 20rpx 20rpx #4751bb, inset 20rpx 20rpx 20rpx 40rpx #fff440'
+      }
+    }
+  ]
+}
 window.onload = () => {
   const h = (l: DrawLayout): HTMLDivElement | HTMLImageElement => {
     const _children = l.children ? l.children.map(e => h(e)) : l.type === 'view' && l.content ? l.content : ''
@@ -325,8 +353,11 @@ window.onload = () => {
     }
   }
   initWindow({
-    dpr: window.devicePixelRatio,
-    // dpr: 1,
+    // dpr: window.devicePixelRatio,
+    dpr: 1,
+    unit: {
+      rpx: 0.5
+    },
     createCanvas,
     createImage: (src: string) =>
       new Promise(resolve => {

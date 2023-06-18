@@ -1,0 +1,10 @@
+<!--component/renderLayout/index.wxml-->
+<view wx:if="{{layout.type==='view'}}" style="{{styleText}}">
+  <block wx:if="{{layout.children && layout.children.length}}">
+    <block wx:for="{{layout.children}}" wx:key="index">
+      <render-layout layout="{{item}}"></render-layout>
+    </block>
+  </block>
+  <block wx:elif="{{layout.content}}">{{layout.content}}</block>
+</view>
+<image wx:if="{{layout.type==='img'}}" src="{{layout.content}}" style="{{layout.styleText}}"></image>

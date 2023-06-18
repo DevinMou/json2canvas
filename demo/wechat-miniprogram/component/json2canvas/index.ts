@@ -1,5 +1,5 @@
 // component/canvas/index.ts
-import { draw, DrawLayout, initWindow, windowInfo, SampleCanvasType } from '../../utils/json2canvas/json2canvas/index' // Replace it with your built file path
+import { draw, initWindow, windowInfo, SampleCanvasType, DrawLayout } from '../../utils/json2canvas/json2canvas' // Replace it with your built file path
 const ramStr = (n = 6) => {
   return Array(n)
     .fill(1)
@@ -16,7 +16,12 @@ Component({
    * 组件的初始数据
    */
   data: {
+    _ready: false as boolean | ((_: void) => void),
+    platform: '',
     canvas: []
+  },
+  options: {
+    pureDataPattern: /^_/
   },
   /**
    * 组件的方法列表
@@ -58,42 +63,53 @@ Component({
                 canvas.getContext = (type: '2d' | 'webgl') => {
                   const ctx = canvas._getContext(type)
                   if (type === '2d') {
-                    const _ctx = new Proxy({}, {
-                      get(_target, prop) {
-                        if (prop === 'drawImage') {
-                          return async (...args: any[]) => {
-                            const param_1st = args[0]
-                            const options = args.slice(1)
-                            if (param_1st.getContext) {
-                              let url = ''
-                              if ('toDataURL' in param_1st) {
-                                url = param_1st.toDataURL()
+                    const _ctx = new Proxy(
+                      {},
+                      {
+                        get(_target, prop) {
+                          if (prop === 'drawImage') {
+                            return async (...args: any[]) => {
+                              const param_1st = args[0]
+                              const options = args.slice(1)
+                              if (param_1st.getContext) {
+                                let url = ''
+                                if ('toDataURL' in param_1st) {
+                                  url = param_1st.toDataURL()
+                                }
+                                if (!url) {
+                                  url = await new Promise(r2 => {
+                                    wx.canvasToTempFilePath(
+                                      {
+                                        param_1st,
+                                        success: res => r2(res.tempFilePath),
+                                        fail: err => console.log(586, err)
+                                      },
+                                      _this
+                                    )
+                                  })
+                                }
+                                const img = await windowInfo.createImage!(url)
+                                return ctx.drawImage(img, ...options)
+                              } else {
+                                return ctx.drawImage(...args)
                               }
-                              if (!url) {
-                                url = await new Promise(r2 => {
-                                  wx.canvasToTempFilePath({
-                                    param_1st,
-                                    success: res => r2(res.tempFilePath),
-                                    fail: err => console.log(586, err)
-                                  }, _this)
-                                })
-                              }
-                              const img = await windowInfo.createImage!(url)
-                              return ctx.drawImage(img, ...options)
-                            } else {
-                              return ctx.drawImage(...args)
                             }
+                          } else {
+                            const val = ctx[prop]
+                            return typeof val === 'function' ? val.bind(ctx) : val
                           }
-                        } else {
-                          const val = ctx[prop]
-                          return typeof val === 'function' ? val.bind(ctx) : val
+                        },
+                        set(_target, prop, val) {
+                          if (['shadowBlur', 'shadowOffsetX', 'shadowOffsetY'].includes(prop as string)) {
+                            // 我已经不想吐槽了
+                            ctx[prop] = val / (_this.data.platform === 'android' ? windowInfo.dpr : 1)
+                          } else {
+                            ctx[prop] = val
+                          }
+                          return true
                         }
-                      },
-                      set(_target, prop, val) {
-                        ctx[prop] = val
-                        return true
                       }
-                    })
+                    )
                     return _ctx
                   }
                   return ctx
@@ -112,18 +128,31 @@ Component({
     },
     draw(layout: DrawLayout) {
       const _this = this
-      return draw(layout).then(res => {
-        const { canvas, width, height, layout } = res!
-        return new Promise(resolve => {
-          wx.canvasToTempFilePath({
-            success: res => {
-              resolve({ path: res.tempFilePath, width: width * windowInfo.dpr, height: height * windowInfo.dpr })
-            },
-            fail: err => {
-              console.log(802, err)
-            },
-            canvas
-          }, _this)
+      return new Promise<void>(resolve => {
+        if (this.data._ready === true) {
+          resolve()
+        } else if (this.data._ready === false) {
+          this.setData({
+            _ready: resolve
+          })
+        }
+      }).then(() => {
+        return draw(layout).then(res => {
+          const { canvas, width, height } = res!
+          return new Promise(resolve => {
+            wx.canvasToTempFilePath(
+              {
+                success: res => {
+                  resolve({ path: res.tempFilePath, width: width * windowInfo.dpr, height: height * windowInfo.dpr })
+                },
+                fail: err => {
+                  console.log(802, err)
+                },
+                canvas
+              },
+              _this
+            )
+          })
         })
       })
     }
@@ -132,26 +161,42 @@ Component({
     ready() {
       if (!windowInfo.createCanvas) {
         const systemInfo = wx.getSystemInfoSync()
+        this.setData({
+          platform: systemInfo.platform
+        })
         initWindow({
           unit: {
             rpx: systemInfo.windowWidth / 750
           },
           dpr: systemInfo.platform === 'android' ? systemInfo.pixelRatio : 1,
-          createCanvas: this.createCanvas.bind(this) as typeof windowInfo['createCanvas'],
+          createCanvas: this.createCanvas.bind(this) as (typeof windowInfo)['createCanvas']
           // clearCanvas: this.clearCanvas.bind(this)
         })
       }
-      windowInfo.createCanvas!(false).then(imageCanvas => {
-        initWindow({
-          createImage(src) {
-            return new Promise(resolve => {
-              const img = (imageCanvas as unknown as WechatMiniprogram.Canvas).createImage()
-              img.onload = () => resolve(img)
-              img.src = src
+      windowInfo.createCanvas!(false)
+        .then(imageCanvas => {
+          initWindow({
+            createImage(src) {
+              return new Promise(resolve => {
+                const img = (imageCanvas as unknown as WechatMiniprogram.Canvas).createImage()
+                img.onload = () => resolve(img)
+                img.src = src
+              })
+            }
+          })
+        })
+        .then(() => {
+          if (typeof this.data._ready === 'function') {
+            this.data._ready()
+            this.setData({
+              _ready: true
+            })
+          } else if (!this.data._ready) {
+            this.setData({
+              _ready: true
             })
           }
         })
-      })
     }
   }
 })

@@ -2,16 +2,17 @@ import { draw, initWindow, DrawLayout, SampleCanvasType, SampleImageType, window
 const layout: DrawLayout = {
   type: 'view',
   styles: {
-    // display: 'inline-flex',
-    display: 'inline-block',
+    display: 'inline-flex',
+    // display: 'inline-block',
     overflow: 'hidden',
     background: 'pink',
     // 'flex-direction': 'column',
-    'flex-wrap': 'nowrap',
+    'flex-wrap': 'wrap',
+    width: '500px',
     'font-size': 0,
     padding: '20px',
     position: 'relative',
-    'justify-content': 'flex-end'
+    'justify-content': 'flex-start'
     // height: '250px'
   },
   children: [
@@ -98,7 +99,7 @@ const layout: DrawLayout = {
         }
       ]
     },
-    /* {
+    {
       type: 'view',
       styles: {
         width: '100px',
@@ -116,7 +117,7 @@ const layout: DrawLayout = {
         color: '#ffffff'
       },
       content: 'Json2canvas'
-    }, */
+    },
     {
       type: 'view',
       styles: {

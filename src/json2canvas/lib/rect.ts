@@ -508,22 +508,6 @@ export class Rect {
     if (!layout.children || !layout.children.length) {
       if (layout.type === 'view' && layout.content) {
         waitComputeText = true
-        this.reactCompute
-          .watch(
-            () => rect.contentWidth,
-            contentWidth => contentWidth !== undefined
-          )
-          .then(async () => {
-            const { flatLines, textWidth } = await getTextLines(
-              layout.content!,
-              rect,
-              style as Parameters<typeof getTextLines>[2]
-            )
-            rect.textLines = flatLines
-            // setWidthOrHeightByStyle(rect, textWidth, false)
-            const lineHeight = computeAstFnParam(windowInfo.checkInherit(rect, 'line-height')![0])
-            setWidthOrHeightByStyle(rect, flatLines.length * lineHeight, false, true)
-          })
       }
     }
 
@@ -617,6 +601,26 @@ export class Rect {
       }
     } else if (!hasHeight && (!layout.children || !layout.children.length) && !waitComputeText) {
       setWidthOrHeightByStyle(rect, 0, false, true)
+    }
+    if (waitComputeText) {
+      this.reactCompute
+        .watch(
+          () => rect.contentWidth,
+          contentWidth => contentWidth !== undefined
+        )
+        .then(async () => {
+          const { flatLines, textWidth } = await getTextLines(
+            layout.content!,
+            rect,
+            style as Parameters<typeof getTextLines>[2]
+          )
+          rect.textLines = flatLines
+          // setWidthOrHeightByStyle(rect, textWidth, false)
+          if (!hasHeight) {
+            const lineHeight = computeAstFnParam(windowInfo.checkInherit(rect, 'line-height')![0])
+            setWidthOrHeightByStyle(rect, flatLines.length * lineHeight, false, true)
+          }
+        })
     }
 
     return {

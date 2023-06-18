@@ -71,9 +71,9 @@ export const getLayoutPosition = (layout: ComputedLayout, moveList?: MoveLayoutI
         }
       })
       const restLength =
-        (layout.rect.flexIsColumn ? layout.rect.boxWidth! : layout.rect.boxHeight!) -
+        (layout.rect.flexIsColumn ? layout.rect.contentWidth! : layout.rect.contentHeight!) -
         flexCrossFixedArr.reduce((a, b) => a + b, 0)
-      flexCrossRestLength = restLength / flexCrossFixedArr.length
+      flexCrossRestLength = restLength / flexCrossFixedArr.length //交叉轴剩余空间长度（align-items会用上）
     }
     let mainFixedLength = 0
     let preMarginBottom: null | number = null

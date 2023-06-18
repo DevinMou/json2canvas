@@ -1,5 +1,5 @@
 // component/canvas/index.ts
-import { draw, DrawLayout, initWindow, windowInfo, SampleCanvasType } from '../../utils/json2canvas/json2canvas/index' // Replace it with your built file path
+import { draw, initWindow, windowInfo, SampleCanvasType, DrawLayout } from '../../utils/json2canvas/json2canvas' // Replace it with your built file path
 const ramStr = (n = 6) => {
   return Array(n)
     .fill(1)
@@ -16,7 +16,12 @@ Component({
    * 组件的初始数据
    */
   data: {
+    _ready: false as boolean | ((_: void) => void),
+    platform: '',
     canvas: []
+  },
+  options: {
+    pureDataPattern: /^_/
   },
   /**
    * 组件的方法列表
@@ -90,7 +95,12 @@ Component({
                         }
                       },
                       set(_target, prop, val) {
-                        ctx[prop] = val
+                        if (['shadowBlur', 'shadowOffsetX', 'shadowOffsetY'].includes(prop as string)) {
+                          // 我已经不想吐槽了
+                          ctx[prop] = val / (_this.data.platform === 'android' ? windowInfo.dpr : 1)
+                        } else {
+                          ctx[prop] = val
+                        }
                         return true
                       }
                     })
@@ -112,18 +122,28 @@ Component({
     },
     draw(layout: DrawLayout) {
       const _this = this
-      return draw(layout).then(res => {
-        const { canvas, width, height, layout } = res!
-        return new Promise(resolve => {
-          wx.canvasToTempFilePath({
-            success: res => {
-              resolve({ path: res.tempFilePath, width: width * windowInfo.dpr, height: height * windowInfo.dpr })
-            },
-            fail: err => {
-              console.log(802, err)
-            },
-            canvas
-          }, _this)
+      return new Promise<void>(resolve => {
+        if (this.data._ready === true) {
+          resolve()
+        } else if (this.data._ready === false) {
+          this.setData({
+            _ready: resolve
+          })
+        }
+      }).then(() => {
+        return draw(layout).then(res => {
+          const { canvas, width, height } = res!
+          return new Promise(resolve => {
+            wx.canvasToTempFilePath({
+              success: res => {
+                resolve({ path: res.tempFilePath, width: width * windowInfo.dpr, height: height * windowInfo.dpr })
+              },
+              fail: err => {
+                console.log(802, err)
+              },
+              canvas
+            }, _this)
+          })
         })
       })
     }
@@ -132,6 +152,9 @@ Component({
     ready() {
       if (!windowInfo.createCanvas) {
         const systemInfo = wx.getSystemInfoSync()
+        this.setData({
+          platform: systemInfo.platform
+        })
         initWindow({
           unit: {
             rpx: systemInfo.windowWidth / 750
@@ -151,6 +174,13 @@ Component({
             })
           }
         })
+      }).then(() => {
+        if (typeof this.data._ready === 'function') {
+          this.data._ready()
+          this.setData({
+            _ready: true
+          })
+        }
       })
     }
   }

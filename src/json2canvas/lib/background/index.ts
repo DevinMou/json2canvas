@@ -239,6 +239,33 @@ export const parseBackgroundShorthand = async (
     }
     const clipCanvas = await windowInfo.createCanvas!(true, backgroundRect.clip.width, backgroundRect.clip.height)
     const clipCtx = clipCanvas.getContext('2d')
+    if (hasRadius) {
+      // clipCtx.globalCompositeOperation = 'destination-in'
+      clipCtx.beginPath()
+      const _border =
+        backgroundItem.clip === 'content-box'
+          ? {
+              left: { ...rect.border.left, width: marginDist['content-box'][0] },
+              top: { ...rect.border.top, width: marginDist['content-box'][1] },
+              right: { ...rect.border.right, width: marginDist['content-box'][2] },
+              bottom: { ...rect.border.bottom, width: marginDist['content-box'][3] }
+            }
+          : rect.border
+      drawBorder({
+        ctx: clipCtx,
+        radius,
+        border: _border,
+        px: -marginDist[backgroundItem.clip][0],
+        py: -marginDist[backgroundItem.clip][1],
+        bw: rect.boxWidth!,
+        bh: rect.boxHeight!,
+        mode: backgroundItem.clip === 'border-box' ? 'out-stroke' : 'in-stroke'
+      })
+      clipCtx.closePath()
+      clipCtx.clip()
+      // clipCtx.fillStyle = '#000000'
+      // clipCtx.fill()
+    }
     if (item.color) {
       const color = getColorByAstItem(item.color)
       if (color) {
@@ -807,32 +834,7 @@ export const parseBackgroundShorthand = async (
         }
       }
     }
-    if (hasRadius) {
-      clipCtx.globalCompositeOperation = 'destination-in'
-      clipCtx.beginPath()
-      const _border =
-        backgroundItem.clip === 'content-box'
-          ? {
-              left: { ...rect.border.left, width: marginDist['content-box'][0] },
-              top: { ...rect.border.top, width: marginDist['content-box'][1] },
-              right: { ...rect.border.right, width: marginDist['content-box'][2] },
-              bottom: { ...rect.border.bottom, width: marginDist['content-box'][3] }
-            }
-          : rect.border
-      drawBorder({
-        ctx: clipCtx,
-        radius,
-        border: _border,
-        px: -marginDist[backgroundItem.clip][0],
-        py: -marginDist[backgroundItem.clip][1],
-        bw: rect.boxWidth!,
-        bh: rect.boxHeight!,
-        mode: backgroundItem.clip === 'border-box' ? 'out-stroke' : 'in-stroke'
-      })
-      clipCtx.closePath()
-      clipCtx.fillStyle = '#000000'
-      clipCtx.fill()
-    }
+
     await backgroundCtx.drawImage(
       clipCanvas,
       backgroundRect.clip.left,

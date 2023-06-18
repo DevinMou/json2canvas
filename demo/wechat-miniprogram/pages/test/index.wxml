@@ -1,0 +1,12 @@
+<!--pages/test/index.wxml-->
+<scroll-view scroll-y style="height: 100%;">
+  <text>wxml:</text>
+  <view>
+    <render-layout layout="{{layout}}"></render-layout>
+  </view>
+  <text>canvas:</text>
+  <view>
+    <image src="{{imgPath}}" style="width: {{imgWidth}}px" mode="widthFix"></image>
+  </view>
+  <json-canvas class="json-canvas" />
+</scroll-view>

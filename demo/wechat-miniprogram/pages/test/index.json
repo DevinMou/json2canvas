@@ -1,0 +1,6 @@
+{
+  "usingComponents": {
+    "json-canvas": "../../component/json2canvas/index",
+    "render-layout": "../../component/renderLayout/index"
+  }
+}

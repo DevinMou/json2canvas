@@ -324,7 +324,7 @@ const drawRadiusAndShadow = async ({
     localCtx.closePath()
     localCtx.fillStyle = shadow.color
     localCtx.fill()
-    ctx.drawImage(localCanvas, x, y, localRect.width, localRect.height)
+    await ctx.drawImage(localCanvas, x, y, localRect.width, localRect.height)
   } else {
     localCtx.fillStyle = shadow.color
     localCtx.shadowBlur = shadow.blur * windowInfo.dpr
@@ -363,7 +363,7 @@ const drawRadiusAndShadow = async ({
     localCtx.closePath()
     localCtx.fill()
     localCtx.globalCompositeOperation = 'source-over'
-    ctx.drawImage(
+    await ctx.drawImage(
       localCanvas,
       x + shadow.x - shadow.blur - computeSpread,
       y + shadow.y - shadow.blur - computeSpread,
@@ -709,6 +709,7 @@ export const drawItem = async (
       },
       ...transform
     ])
+    parentCtx.save()
     parentCtx.transform(...matrix)
     await parentCtx.drawImage(
       canvas,
@@ -718,6 +719,7 @@ export const drawItem = async (
       layout.rect.boxHeight! / windowInfo.dpr
     )
     parentCtx.setTransform(windowInfo.dpr, 0, 0, windowInfo.dpr, 0, 0)
+    parentCtx.restore()
   }
 }
 
@@ -731,10 +733,14 @@ const getSplitAngle = (
   fy: 1 | -1 = 1,
   fx: 1 | -1 = 1
 ): number | null => {
+  const isZero = (val: number) => Math.abs(val) < 1e-5
   const res: [number, number][] = []
   const A = wy * wy * rx * rx + wx * wx * ry * ry
   const B = -2 * (wy * px - wx * py) * wy * rx * rx
-  const C = Math.pow(wy * px - wx * py, 2) * rx * rx - wx * wx * rx * rx * ry * ry
+  let C = Math.pow(wy * px - wx * py, 2) * rx * rx - wx * wx * rx * rx * ry * ry
+  if (isZero(C)) {
+    C = 0
+  }
   const isInFirstQuadrant = (x: number, y: number): boolean => {
     return x >= 0 && y >= 0
   }
@@ -749,9 +755,7 @@ const getSplitAngle = (
 
   // 求解二元二次方程
   const delta = B * B - 4 * A * C
-  if (delta < 0) {
-    return null // 无实数解
-  } else if (delta === 0) {
+  if (isZero(delta)) {
     const x = -B / (2 * A)
     const y = getY(x)
     if (isInFirstQuadrant(x, y)) {
@@ -759,6 +763,8 @@ const getSplitAngle = (
     } else {
       return null
     }
+  } else if (delta < 0) {
+    return null // 无实数解
   } else {
     const x1 = (-B + Math.sqrt(delta)) / (2 * A)
     const x2 = (-B - Math.sqrt(delta)) / (2 * A)

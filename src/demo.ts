@@ -8,11 +8,11 @@ const layout: DrawLayout = {
     background: 'pink',
     // 'flex-direction': 'column',
     'flex-wrap': 'wrap',
-    width: '500px',
+    width: '350px',
     'font-size': 0,
     padding: '20px',
     position: 'relative',
-    'justify-content': 'flex-start'
+    'justify-content': 'flex-end'
     // height: '250px'
   },
   children: [
@@ -305,7 +305,175 @@ const layout3: DrawLayout = {
     }
   ]
 }
+const layout4: DrawLayout = {
+  type: 'view',
+  styles: {
+    display: 'inline-flex',
+    // display: 'inline-block',
+    overflow: 'hidden',
+    background: 'pink',
+    // 'flex-direction': 'column',
+    'flex-wrap': 'wrap',
+    width: '660rpx',
+    'font-size': 0,
+    padding: '40rpx',
+    position: 'relative',
+    'justify-content': 'flex-start'
+    // height: '250rpx'
+  },
+  children: [
+    {
+      type: 'view',
+      styles: {
+        width: 'calc(55% + 200rpx)',
+        // width: '55%',
+        height: '200rpx',
+        background:
+          'url("https://image.brightfuture360.com/static/temple/merit-box/btn-1.png") no-repeat center top calc(-15% + 20rpx)/cover,linear-gradient(135deg, red, orange 10%, yellow, green, blue 31%,40%,purple 50%,black calc(100% - 40rpx), #fff) repeat bottom 20rpx right/calc(100% - min(1%, 10rpx)) calc(calc(50% / 2) - calc(20rpx + 10rpx)) content-box,#ff0000 padding-box content-box',
+        flex: '1 2 auto',
+        // 'box-sizing': 'content-box',
+        'box-sizing': 'border-box',
+        display: 'inline-block',
+        padding: '0 calc(3% + 10rpx)',
+        'border-radius': '60rpx',
+        'border-top': '20rpx solid #4335ec00',
+        'border-right': '40rpx solid #29de9d7d'
+      }
+    },
+    {
+      type: 'view',
+      styles: {
+        width: 'auto',
+        height: '200rpx',
+        background: 'yellow',
+        flex: '1 1 auto',
+        overflow: 'hidden',
+        display: 'inline-flex',
+        'box-sizing': 'content-box',
+        'transform-origin': 'right top',
+        transform: 'scale(.8, .8) skew(20deg) rotate(30deg) translate(20rpx, calc(100rpx - 5%))'
+      }
+      /* children: [
+        {
+          type: 'view',
+          styles: {
+            width: '120rpx',
+            height: '100rpx',
+            background: 'purple',
+            // margin: '20rpx 0',
+            'align-self': 'flex-start',
+            display: 'inline-block'
+          }
+        },
+        {
+          type: 'view',
+          styles: {
+            width: '180rpx',
+            height: '100rpx',
+            background: 'aqua',
+            display: 'inline-block'
+          }
+        }
+      ] */
+    },
+    {
+      type: 'view',
+      styles: {
+        width: '200rpx',
+        // height: 'auto',
+        height: '100rpx',
+        background: 'green',
+        flex: '0 1 auto',
+        'box-sizing': 'content-box',
+        display: 'block',
+        margin: '0 0 60rpx 0'
+        // position: 'absolute'
+        // right: '0'
+        // padding: '0 min(5%, 20rpx)'
+      },
+      children: [
+        {
+          type: 'view',
+          styles: {
+            width: '400rpx',
+            height: '400rpx',
+            background: 'rgba(0,0,0,0.3)',
+            position: 'absolute',
+            // 'z-index': -1,
+            left: '0',
+            bottom: '600rpx'
+            // transform: 'translate(10%, -34rpx) scale(1.5)'
+          }
+        },
+        {
+          type: 'view',
+          styles: {
+            width: '95rpx',
+            height: '95rpx',
+            background: 'rgba(0,0,255,0.3)',
+            position: 'absolute',
+            right: 0,
+            top: 0
+            // transform: 'translate(10%, -34rpx) scale(1.5)'
+          }
+        }
+      ]
+    },
+    {
+      type: 'view',
+      styles: {
+        width: '100rpx',
+        height: '100rpx',
+        background: 'blue',
+        'border-radius': '25rpx',
+        flex: '0 2 auto',
+        padding: '0 20rpx',
+        // 'box-sizing': 'border-box',
+        display: 'inline-block',
+        'box-shadow': 'inset -20rpx -10rpx 10rpx 20rpx #000, 5rpx 5rpx 5rpx',
+        'align-self': 'center',
+        'font-size': '14rpx',
+        'line-height': '20rpx',
+        color: '#ffffff'
+      },
+      content: 'Json2canvas'
+    },
+    {
+      type: 'view',
+      styles: {
+        width: '200rpx',
+        height: '200rpx',
+        background: 'plum',
+        flex: '0 1 auto',
+        'box-sizing': 'content-box',
+        margin: '40rpx 0',
+        display: 'block',
+        'align-self': 'center'
+        // padding: '0 max(5%, 20rpx)'
+      }
+    },
+    {
+      type: 'view',
+      styles: {
+        width: '400rpx',
+        height: '400rpx',
+        background: 'orange content-box',
+        flex: '0 1 auto',
+        'box-sizing': 'content-box',
+        margin: '20rpx 0 0',
+        display: 'inline-block',
+        'align-self': 'center',
+        'border-top': '20rpx solid #fff',
+        'border-left': '40rpx solid transparent',
+        'border-right': '80rpx solid',
+        'border-radius': '100rpx 40rpx',
+        'box-shadow': '0rpx -180rpx 20rpx 20rpx #4751bb, inset 20rpx 20rpx 20rpx 40rpx #fff440'
+      }
+    }
+  ]
+}
 window.onload = () => {
+  const demoLayout = layout4
   const h = (l: DrawLayout): HTMLDivElement | HTMLImageElement => {
     const _children = l.children ? l.children.map(e => h(e)) : l.type === 'view' && l.content ? l.content : ''
     const tag = l.type === 'view' ? 'div' : 'img'
@@ -313,7 +481,7 @@ window.onload = () => {
     el.style.cssText = Object.entries(l.styles)
       .map(e => `${e[0]}:${e[1]}`)
       .join(';')
-      .replace(/rpx/g, 'px')
+      .replace(/([\d\.]+)rpx/g, (_, v) => `${v * windowInfo.unit.rpx}px`)
     if (tag === 'img' && l.content) {
       el.setAttribute('src', l.content)
     }
@@ -328,7 +496,6 @@ window.onload = () => {
   }
   const demoDom = document.getElementById('demo_dom')
   const demoCanvas = document.getElementById('demo_canvas') as HTMLCanvasElement
-  demoDom!.appendChild(h(layout))
   function createCanvas(isOffScreen: false): Promise<SampleCanvas.Canvas<true>>
   function createCanvas(isOffScreen: true, width?: number, height?: number): Promise<SampleCanvas.Canvas<false>>
   function createCanvas(isOffScreen: boolean, width = 1, height = 1) {
@@ -365,9 +532,24 @@ window.onload = () => {
         const img = new Image() as SampleImageType
         img.onload = () => resolve(img)
         img.src = src
-      })
+      }),
+    baseInheritMap: {
+      'font-size': {
+        rootValue: '14px',
+        inheritFn(rect, commonGetInherit) {
+          const fontSizeAst = commonGetInherit(rect, 'font-size')![0]
+          if (typeof fontSizeAst === 'object' && 'value' in fontSizeAst) {
+            const rate = windowInfo.unit[fontSizeAst.unit] || 1
+            const val = fontSizeAst.value * rate
+            fontSizeAst.value = Math.max(12, val) / rate
+          }
+          return [fontSizeAst]
+        }
+      }
+    }
   })
-  draw(layout).then(res => {
+  demoDom!.appendChild(h(demoLayout))
+  draw(demoLayout).then(res => {
     const { canvas, width, height, layout } = res! || {}
     console.log(137, canvas, width, height, layout)
     if (demoCanvas) {

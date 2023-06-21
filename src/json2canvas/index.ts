@@ -93,19 +93,22 @@ const checkInherit = <T extends AstFn['params'][number] = AstFn['params'][number
   cssProp: keyof DrawStyles
 ): T[] | undefined => {
   const baseItem = windowInfo.baseInheritMap[cssProp]
+  let res: T[] | undefined
   if (baseItem) {
     if (baseItem.commonInherit) {
-      return commonGetInherit(rect, cssProp) as T[] | undefined
+      res = commonGetInherit(rect, cssProp) as T[] | undefined
     } else if (baseItem.inheritFn) {
-      return baseItem.inheritFn(rect) as T[] | undefined
+      res = baseItem.inheritFn(rect, commonGetInherit) as T[] | undefined
     } else {
-      return rect.styleSplits[cssProp] as T[] | undefined
+      res = rect.styleSplits[cssProp] as T[] | undefined
     }
   } else {
-    return rect.styleSplits[cssProp] as T[] | undefined
+    res = rect.styleSplits[cssProp] as T[] | undefined
   }
+  return res
 }
-const commonGetInherit = (rect: LayoutRect, cssProp: keyof DrawStyles) => {
+type CommonGetInterit = (rect: LayoutRect, cssProp: keyof DrawStyles) => undefined | AstFn['params']
+const commonGetInherit: CommonGetInterit = (rect: LayoutRect, cssProp: keyof DrawStyles) => {
   let val = rect.styleSplits[cssProp]
   let currentRect: LayoutRect | undefined = rect
   while (!val && currentRect) {
@@ -128,7 +131,7 @@ type BaseInheritMap<T extends keyof DrawStyles = keyof DrawStyles> = Partial<{
   [k in T]: {
     rootValue?: DrawStyles[T]
     commonInherit?: boolean
-    inheritFn?: (rect: LayoutRect) => AstFn['params'] | undefined
+    inheritFn?: (rect: LayoutRect, commonGetInherit: CommonGetInterit) => AstFn['params'] | undefined
   }
 }>
 

@@ -31,10 +31,13 @@ const computedText: {
   context?: SampleCanvas.RenderContext
 } = {}
 
+const reg_CJK = /[\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\u3100-\u312F\u3130-\u318F\uAC00-\uD7AF]/g
+const reg_CJK2 = /[\p{Script_Extensions=Han}|\p{Script_Extensions=Kana}]/gu
 const getTextLines = async (
   content: string,
   rect: ComputedLayout['rect'],
-  styles: PickRequried<ReturnType<typeof coverStyles2RealValue>, 'font-size' | 'font-weight' | 'line-height'>
+  styles: PickRequried<ReturnType<typeof coverStyles2RealValue>, 'font-size' | 'font-weight' | 'line-height'>,
+  inheritWidth?: number
 ) => {
   if (!computedText.canvas) {
     computedText.canvas = await windowInfo.createCanvas!(true)
@@ -56,6 +59,57 @@ const getTextLines = async (
     'break-spaces': [0, 0, 1, 2]
   }
   const rule = rules[styles['white-space'] || 'normal'] || rules['normal']
+
+  const breakRules = {
+    // cjk能否断行，长cjk是否新启行，no-cjk能否断行，长no-cjk是否新启行，是否突破父容器宽度，cjk与no-cjk混合是否分离断行
+    // obj-key: word-break;arr-index: overflow-wrap[normal, break-word, anywhere];
+    'width-fixed': {
+      normal: [
+        [1, 0, 0, 1, 0, 0],
+        [1, 0, 1, 1, 0, 0],
+        [1, 0, 1, 1, 0, 0]
+      ],
+      'keep-all': [
+        [0, 1, 0, 1, 0, 0],
+        [1, 1, 1, 1, 0, 0],
+        [1, 1, 1, 1, 0, 0]
+      ],
+      'break-word': [
+        [1, 0, 1, 1, 0, 1],
+        [1, 0, 1, 1, 0, 1],
+        [1, 0, 1, 1, 0, 1]
+      ],
+      'break-all': [
+        [1, 0, 1, 0, 0, 0],
+        [1, 0, 1, 0, 0, 0],
+        [1, 0, 1, 0, 0, 0]
+      ]
+    },
+    'width-auto': {
+      normal: [
+        [1, 0, 0, 1, 1, 0],
+        [1, 0, 0, 1, 1, 0],
+        [1, 0, 1, 1, 0, 0]
+      ],
+      'keep-all': [
+        [0, 1, 0, 1, 1, 0],
+        [0, 1, 0, 1, 1, 0],
+        [1, 1, 1, 1, 0, 0]
+      ],
+      'break-word': [
+        [1, 0, 1, 1, 0, 1],
+        [1, 0, 1, 1, 0, 1],
+        [1, 0, 1, 1, 0, 1]
+      ],
+      'break-all': [
+        [1, 0, 1, 0, 0, 0],
+        [1, 0, 1, 0, 0, 0],
+        [1, 0, 1, 0, 0, 0]
+      ]
+    }
+  }
+  if ([undefined, 'auto'].includes(styles.width)) {
+  }
   let fontWeight: 'normal' | 'bold' = 'normal'
   if (inheritFont.weight) {
     if (typeof inheritFont.weight === 'string') {
@@ -459,6 +513,7 @@ export class Rect {
         margin,
         marginCenterAuto,
         padding,
+        widthByChildren: false,
         parentRect: undefined,
         parentStyle: undefined,
         parentLayout: parentRAT?.layout,
@@ -503,6 +558,11 @@ export class Rect {
     }
     if (/^inline-/.test(styles.display || '')) {
       rect.isInline = true
+      if (rect.isFlexItem ? rect.parentRect!.flexIsColumn && rect.alignSelf !== 'stretch' : true) {
+        if ([undefined, 'auto'].includes(style.width)) {
+          rect.widthByChildren = true
+        }
+      }
     }
     let waitComputeText = false
     if (!layout.children || !layout.children.length) {
@@ -603,24 +663,54 @@ export class Rect {
       setWidthOrHeightByStyle(rect, 0, false, true)
     }
     if (waitComputeText) {
-      this.reactCompute
-        .watch(
-          () => rect.contentWidth,
-          contentWidth => contentWidth !== undefined
-        )
-        .then(async () => {
-          const { flatLines, textWidth } = await getTextLines(
-            layout.content!,
-            rect,
-            style as Parameters<typeof getTextLines>[2]
-          )
-          rect.textLines = flatLines
-          // setWidthOrHeightByStyle(rect, textWidth, false)
-          if (!hasHeight) {
-            const lineHeight = computeAstFnParam(windowInfo.checkInherit(rect, 'line-height')![0])
-            setWidthOrHeightByStyle(rect, flatLines.length * lineHeight, false, true)
+      let isAbsolute = false
+      let needWaitWidthRect: LayoutRect | undefined = undefined
+      if ([undefined, 'auto'].includes(style.width)) {
+        if (style.position === 'absolute') {
+          let postionParentStyleRect = rect
+          while (
+            !postionParentStyleRect ||
+            !['relative', 'absolute'].includes(postionParentStyleRect.parentStyle?.position)
+          ) {
+            postionParentStyleRect = postionParentStyleRect.parentRect
           }
-        })
+          if (postionParentStyleRect && !postionParentStyleRect.parentRect!.widthByChildren) {
+            needWaitWidthRect = postionParentStyleRect.parentRect
+            isAbsolute = true
+          }
+        } else if (rect.parentRect && !rect.parentRect.widthByChildren) {
+          needWaitWidthRect = rect.parentRect
+        }
+      } else {
+        needWaitWidthRect = rect
+      }
+      new Promise<number | undefined>(resolve => {
+        if (needWaitWidthRect) {
+          this.reactCompute.watch(
+            () => needWaitWidthRect!.boxWidth,
+            async boxWidth => {
+              if (boxWidth !== undefined) {
+                resolve(isAbsolute ? boxWidth : needWaitWidthRect!.contentWidth)
+              }
+            }
+          )
+        } else {
+          resolve(undefined)
+        }
+      }).then(async inheritWidth => {
+        const { flatLines, textWidth } = await getTextLines(
+          layout.content!,
+          rect,
+          style as Parameters<typeof getTextLines>[2],
+          inheritWidth
+        )
+        rect.textLines = flatLines
+        // setWidthOrHeightByStyle(rect, textWidth, false)
+        if (!hasHeight) {
+          const lineHeight = computeAstFnParam(windowInfo.checkInherit(rect, 'line-height')![0])
+          setWidthOrHeightByStyle(rect, flatLines.length * lineHeight, false, true)
+        }
+      })
     }
 
     return {
@@ -680,6 +770,8 @@ export class Rect {
             } else if (e.rect[isColumn ? 'contentHeight' : 'contentWidth'] !== undefined) {
               flexItem.contentLength = e.rect[isColumn ? 'contentHeight' : 'contentWidth']
               flexItem.borderBox = false
+            } else {
+              flexItem.styleLength = 0
             }
             flexItemGroup.push(flexItem)
           })

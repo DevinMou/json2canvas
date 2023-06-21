@@ -69,6 +69,11 @@ export const setFlexSizeLength = (
   let paddingFixedSum = 0
   let marginFixedSum = 0
   // let paddingBorderSum = 0
+  const getBorderLength = (rect: LayoutRect) => {
+    return isColumn
+      ? rect.border.top.width + rect.border.bottom.width
+      : rect.border.left.width + rect.border.right.width
+  }
   const getMarginOrPadding = (rect: LayoutRect, mp: 'margin' | 'padding', isFixed = false) => {
     const arr = rect[mp]!
     const group = isColumn ? [arr[0], arr[2]] : [arr[1], arr[3]]
@@ -82,7 +87,7 @@ export const setFlexSizeLength = (
     // e = { ...e }
     if (e.layout.rect) {
       if (e.layout.styles.padding) {
-        paddingFixedSum += getMarginOrPadding(e.layout.rect, 'padding', true)
+        paddingFixedSum += getMarginOrPadding(e.layout.rect, 'padding', true) + getBorderLength(e.layout.rect)
         if (!e.borderBox) {
           paddingContentArr.push(e.layout.rect)
         }
@@ -113,7 +118,9 @@ export const setFlexSizeLength = (
   })
   flexLength += paddingFixedSum + marginFixedSum
   let flexBoxLength = flexBoxInitLength || flexLength
-  const paddingContentSum = paddingContentArr.map(e => getMarginOrPadding(e, 'padding')).reduce((a, b) => a + b, 0)
+  const paddingContentSum = paddingContentArr
+    .map(e => getMarginOrPadding(e, 'padding') + getBorderLength(e))
+    .reduce((a, b) => a + b, 0)
   const marginSum = marginArr.map(e => getMarginOrPadding(e, 'margin')).reduce((a, b) => a + b, 0)
   let restRoomLength = 0
   let shrinkLength = 0
@@ -122,7 +129,7 @@ export const setFlexSizeLength = (
     restRoomLength =
       percentArr.map(e => e.percentLength(flexBoxLength)).reduce((a, b) => a + b, 0) +
       fixedArr.map(e => e.fixedLength).reduce((a, b) => a + b, 0) +
-      flexArr.map(e => e.styleLength || e.contentLength).reduce((a, b) => a + b, 0) +
+      flexArr.map(e => e.styleLength || e.contentLength || 0).reduce((a, b) => a + b, 0) +
       paddingContentSum +
       marginSum -
       flexBoxLength
@@ -130,13 +137,14 @@ export const setFlexSizeLength = (
       shrinkLength = [
         ...percentArr.map(
           e =>
-            (e.percentLength(flexBoxLength) - ((e.borderBox && getMarginOrPadding(e.layout.rect, 'padding')) || 0)) *
+            (e.percentLength(flexBoxLength) -
+              ((e.borderBox && getMarginOrPadding(e.layout.rect, 'padding') + getBorderLength(e.layout.rect)) || 0)) *
             e.flexShrink
         ),
         ...flexArr.map(
           e =>
-            ((e.styleLength || e.contentLength) -
-              ((e.borderBox && getMarginOrPadding(e.layout.rect, 'padding')) || 0)) *
+            ((e.styleLength || e.contentLength || 0) -
+              ((e.borderBox && getMarginOrPadding(e.layout.rect, 'padding') + getBorderLength(e.layout.rect)) || 0)) *
             e.flexShrink
         )
       ].reduce((a, b) => a + b, 0)
@@ -152,7 +160,7 @@ export const setFlexSizeLength = (
         return e
       }),
       ...flexArr.map(e => {
-        e.sizeLength = e.styleLength || e.contentLength
+        e.sizeLength = e.styleLength || e.contentLength || 0
         return e
       }),
       ...fixedArr.map(e => {
@@ -170,8 +178,9 @@ export const setFlexSizeLength = (
         const flexItemLength =
           (item.percentLength !== undefined
             ? item.percentLength(flexBoxLength)
-            : item.styleLength || item.contentLength!) +
-          ((!item.borderBox && getMarginOrPadding(item.layout.rect, 'padding')) || 0) +
+            : item.styleLength || item.contentLength || 0) +
+          ((!item.borderBox && getMarginOrPadding(item.layout.rect, 'padding') + getBorderLength(item.layout.rect)) ||
+            0) +
           (getMarginOrPadding(item.layout.rect, 'margin') || 0)
         if (flexItemLength + tempLength > flexBoxLength) {
           tempLength = 0
@@ -194,10 +203,12 @@ export const setFlexSizeLength = (
         }
         flexArr.forEach(e => {
           const item = e.styleLength || e.contentLength || 0
-          const padding = e.borderBox ? getMarginOrPadding(e.layout.rect, 'padding') || 0 : 0
+          const padding = e.borderBox
+            ? getMarginOrPadding(e.layout.rect, 'padding') + getBorderLength(e.layout.rect)
+            : 0
           const maxItem = Math.max(item, padding)
           e.sizeLength = item - (((maxItem - padding) * e.flexShrink) / shrinkLength) * restRoomLength
-          const _padding = getMarginOrPadding(e.layout.rect, 'padding')
+          const _padding = getMarginOrPadding(e.layout.rect, 'padding') + getBorderLength(e.layout.rect)
           if (e.borderBox && _padding && e.sizeLength < _padding) {
             e.fixedLength = _padding
             fixedArr.push(e as (typeof fixedArr)[0])
@@ -220,7 +231,7 @@ export const setFlexSizeLength = (
           percentArr.length,
           ...percentArr.filter(e => {
             const item = e.percentLength!(flexBoxLength)
-            const _padding = getMarginOrPadding(e.layout.rect, 'padding')
+            const _padding = getMarginOrPadding(e.layout.rect, 'padding') + getBorderLength(e.layout.rect)
             const padding = e.borderBox ? _padding || 0 : 0
             const maxItem = Math.max(item, padding)
             e.sizeLength = item - (((maxItem - padding) * e.flexShrink) / shrinkLength) * restRoomLength

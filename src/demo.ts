@@ -96,6 +96,24 @@ const layout: DrawLayout = {
             bottom: 'calc(20px + 30%)',
             transform: 'translate(100%, -17px) scale(1.5)'
           }
+        },
+        {
+          type: 'view',
+          styles: {
+            width: '100px',
+            position: 'absolute',
+            top: '10px',
+            left: '20px',
+            'font-size': '14px',
+            color: '#333',
+            'font-weight': 500,
+            background: '#eee',
+            'line-height': 1.4,
+            'line-break': 'anywhere'
+          },
+          content: `This is a long》 and
+          Honorificabilitudinitatibus califragilisticexpialidocious Taumatawhakatangihangakoauauotamateaturipukakapikimaungahoronukupokaiwhenuakitanatahu
+          グレートブリテンおよび北アイルランド連合王国という言葉は本当に長い言葉`
         }
       ]
     },
@@ -473,7 +491,7 @@ const layout4: DrawLayout = {
   ]
 }
 window.onload = () => {
-  const demoLayout = layout4
+  const demoLayout = layout
   const h = (l: DrawLayout): HTMLDivElement | HTMLImageElement => {
     const _children = l.children ? l.children.map(e => h(e)) : l.type === 'view' && l.content ? l.content : ''
     const tag = l.type === 'view' ? 'div' : 'img'

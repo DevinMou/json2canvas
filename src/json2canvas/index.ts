@@ -72,8 +72,7 @@ const drawTexts = (layout: ComputedLayout, ctx: SampleCanvas.RenderContext, pare
           parentLeft +
             getMarginOrPaddingValue(layout.rect, 'padding-left') +
             offsetX[inheritFont['text-align'] || 'left'] || 0,
-          parentTop + getMarginOrPaddingValue(layout.rect, 'padding-top') + (i + 1) * lineHeight + offsetY,
-          layout.rect.boxWidth
+          parentTop + getMarginOrPaddingValue(layout.rect, 'padding-top') + (i + 1) * lineHeight + offsetY
         )
       })
     } else {
@@ -82,8 +81,7 @@ const drawTexts = (layout: ComputedLayout, ctx: SampleCanvas.RenderContext, pare
         parentLeft +
           getMarginOrPaddingValue(layout.rect, 'padding-left') +
           offsetX[inheritFont['text-align'] || 'left'] || 0,
-        parentTop + getMarginOrPaddingValue(layout.rect, 'padding-top') + lineHeight + offsetY,
-        layout.rect.boxWidth
+        parentTop + getMarginOrPaddingValue(layout.rect, 'padding-top') + lineHeight + offsetY
       )
     }
   }

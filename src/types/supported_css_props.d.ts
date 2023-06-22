@@ -39,6 +39,6 @@ interface DrawStyles {
   'border-bottom': NOS
   'transform-origin': NOS
   transform: string
-  // 'word-break': 'normal' | 'break-all' | 'keep-all' | 'break-word' //有点复杂，先放一放
-  // 'overflow-wrap': 'normal' | 'anywhere' | 'break-word'
+  'word-break': 'normal' | 'break-all' | 'keep-all' //有点复杂，先放一放
+  'overflow-wrap': 'normal' | 'anywhere' | 'break-word' //暂时摆在这儿
 }

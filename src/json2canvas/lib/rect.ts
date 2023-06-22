@@ -31,8 +31,9 @@ const computedText: {
   context?: SampleCanvas.RenderContext
 } = {}
 
-const reg_CJK = /[\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\u3100-\u312F\u3130-\u318F\uAC00-\uD7AF]/g
-const reg_CJK2 = /[\p{Script_Extensions=Han}|\p{Script_Extensions=Kana}]/gu
+const reg_CJK = /[\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\u3100-\u312F\u3130-\u318F\uAC00-\uD7AF]/
+const reg_CJK2 = /[\p{Script_Extensions=Han}|\p{Script_Extensions=Kana}]/u
+const reg_word = /\p{L}+/u
 const getTextLines = async (
   content: string,
   rect: ComputedLayout['rect'],
@@ -107,9 +108,21 @@ const getTextLines = async (
         [1, 0, 1, 0, 0, 0]
       ]
     }
-  }
-  if ([undefined, 'auto'].includes(styles.width)) {
-  }
+  } as const
+  const overflowWrapProp = ['normal', 'break-word', 'anywhere'] as const
+  const breakRuleNames = [
+    'cjk-break',
+    'cjk-long-new',
+    'no-cjk-break',
+    'no-cjk-long-new',
+    'overflow',
+    'cjk-no-cjk-split'
+  ] as const
+  const breakRule = (inheritWidth === undefined ? breakRules['width-auto'] : breakRules['width-fixed'])[
+    styles['word-break'] || 'normal'
+  ][overflowWrapProp.indexOf(styles['overflow-wrap'] || 'normal')]
+  // const breakRuleDist: Record<typeof breakRuleNames[number], boolean> = Object.fromEntries(breakRule.map((e,i) => [breakRuleNames[i], !!e]))
+
   let fontWeight: 'normal' | 'bold' = 'normal'
   if (inheritFont.weight) {
     if (typeof inheritFont.weight === 'string') {
@@ -137,6 +150,7 @@ const getTextLines = async (
     }
   } */
   const width = rect.contentWidth!
+  // const width = inheritWidth
   const baseNum = Math.floor(width / fontSize)
   const getLine = (str: string) => {
     const len = str.length
@@ -145,8 +159,11 @@ const getTextLines = async (
     let ok: undefined | boolean | null = undefined
     const siteArr: [number, number, string][] = []
     const lineBreakStr = `,，.。”！》、：；】〉!:;]>`
+    const hanging_punctuation = /[，。！？；：、）”】」》,.!?;:)\]]/ // 避首标点
+    const trailing_punctuation = /[“（《「(\[]]/ // 避尾标点
     const isEnd = () => {
       if (endIndex >= len - 1) {
+        // 无剩余字符
         endIndex = len
         siteArr.push([startIndex, endIndex, str.slice(startIndex, endIndex)])
         ok = null
@@ -156,15 +173,47 @@ const getTextLines = async (
       }
     }
     const lineAdd = (offset = 0) => {
+      // 换行新一轮
+      const lastEndChart = str.charAt(endIndex + offset - 1)
+      const newStartChart = str.charAt(endIndex + offset)
+      const lastStr = str.slice(startIndex, endIndex + offset)
+      if (styles['line-break'] !== 'anywhere') {
+        const last_is_cjk = reg_CJK.test(lastEndChart)
+        const new_is_cjk = reg_CJK.test(newStartChart)
+        if (trailing_punctuation.test(lastEndChart)) {
+          const trailing_match = new RegExp(trailing_punctuation.source + '+$').exec(lastStr)
+          if (lastStr.length !== trailing_match![0].length) {
+            endIndex -= trailing_match![0].length
+          }
+        } else if (hanging_punctuation.test(newStartChart)) {
+          const hanging_match = new RegExp(`\\b(\\p{L}+)(${hanging_punctuation.source}+)?$`, 'u').exec(lastStr)
+          if (hanging_match && lastStr.length !== hanging_match[0].length) {
+            endIndex -= hanging_match[0].length
+          }
+        } else if (reg_word.test(lastEndChart) && reg_word.test(newStartChart) && !last_is_cjk && !new_is_cjk) {
+          const pre_match = new RegExp(`${reg_word.source}$`, 'u').exec(lastStr)
+          const pre_word_arr = pre_match![0].split(reg_CJK)
+          endIndex -= pre_word_arr[pre_word_arr.length - 1].length + 1
+          const whole_match = new RegExp(`^${reg_word.source}`, 'u').exec(str.slice(endIndex))
+          const whole_word = whole_match![0].split(reg_CJK, 1)[0]
+          startIndex !== endIndex && siteArr.push([startIndex, endIndex, str.slice(startIndex, endIndex + offset)])
+          startIndex = endIndex
+          endIndex += whole_word.length
+          offset = 0
+        }
+      }
       siteArr.push([startIndex, endIndex, str.slice(startIndex, endIndex + offset)])
       startIndex = endIndex + offset
+      if (rule[1] && /\u0020/.test(str.charAt(startIndex))) {
+        startIndex += /^\u0020+/.exec(str.slice(startIndex))![0].length
+      }
       endIndex = startIndex + baseNum
       ok = undefined
     }
     while (ok !== null) {
       if (styles['line-break'] !== 'anywhere' && siteArr.length) {
         const lastLine = siteArr[siteArr.length - 1]
-        const lastLineStr = lastLine[2].charAt(0)
+        const lastLineStr = lastLine[2]
         const currentFirstChart = str.charAt(startIndex)
         if (lineBreakStr.includes(currentFirstChart)) {
           const lastNoBreakCharIndex = lastLineStr
@@ -180,6 +229,7 @@ const getTextLines = async (
       }
       const w = computedText.context!.measureText(str.slice(startIndex, endIndex)).width
       if (ok === undefined) {
+        // 一轮初始状态
         if (w === width) {
           if (!isEnd()) {
             lineAdd()
@@ -187,6 +237,7 @@ const getTextLines = async (
         } else {
           ok = rule[2] ? w < width : true
           if (ok) {
+            // 未达到限宽
             if (!isEnd()) {
               endIndex += 1
             }
@@ -196,23 +247,29 @@ const getTextLines = async (
         }
       } else {
         if (ok) {
+          // 未达到限宽且+1长度
           if (w === width) {
             if (!isEnd()) {
               lineAdd()
             }
           } else if (rule[2] ? w < width : true) {
+            //仍未达到限宽
             if (!isEnd()) {
               endIndex += 1
             }
           } else {
+            //超过限宽
             lineAdd(-1)
           }
         } else {
+          // 超过限宽且-1长度
           if (w === width) {
             lineAdd()
           } else if (rule[2] ? w > width : false) {
+            //仍超过限宽
             endIndex -= 1
           } else {
+            // 未达到限宽
             lineAdd()
           }
         }
@@ -224,15 +281,11 @@ const getTextLines = async (
     content = content.replace(/\n/g, ' ')
   }
   if (rule[1]) {
-    content = content.replace(/\t/g, ' ')
-    content = content
-      .split(/\n/g)
-      .map(e => e.replace(/\s+/g, ' ').replace(/^\s/, ''))
-      .join('\n')
+    content = content.replace(/\t/g, ' ').replace(/\u0020+/g, ' ')
   }
   const res = content.split(/\n/g).map(e => {
     if (e) {
-      return getLine(e)
+      return getLine(rule[1] ? e.trim() : e)
     } else {
       return { sites: [[0, 0, '']] as [number, number, string][], content: '' }
     }

@@ -62,50 +62,50 @@ const getTextLines = async (
   const rule = rules[styles['white-space'] || 'normal'] || rules['normal']
 
   const breakRules = {
-    // cjk能否断行，长cjk是否新启行，no-cjk能否断行，长no-cjk是否新启行，是否突破父容器宽度，cjk与no-cjk混合是否分离断行
+    // cjk能否断行，长cjk是否新启行，no-cjk能否断行，长no-cjk是否新启行，是否突破父容器宽度
     // obj-key: word-break;arr-index: overflow-wrap[normal, break-word, anywhere];
     'width-fixed': {
       normal: [
-        [1, 0, 0, 1, 0, 0],
-        [1, 0, 1, 1, 0, 0],
-        [1, 0, 1, 1, 0, 0]
+        [1, 0, 0, 1, 0],
+        [1, 0, 1, 1, 0],
+        [1, 0, 1, 1, 0]
       ],
       'keep-all': [
-        [0, 1, 0, 1, 0, 0],
-        [1, 1, 1, 1, 0, 0],
-        [1, 1, 1, 1, 0, 0]
+        [0, 1, 0, 1, 0],
+        [1, 1, 1, 1, 0],
+        [1, 1, 1, 1, 0]
       ],
       'break-word': [
-        [1, 0, 1, 1, 0, 1],
-        [1, 0, 1, 1, 0, 1],
-        [1, 0, 1, 1, 0, 1]
+        [1, 0, 1, 1, 0],
+        [1, 0, 1, 1, 0],
+        [1, 0, 1, 1, 0]
       ],
       'break-all': [
-        [1, 0, 1, 0, 0, 0],
-        [1, 0, 1, 0, 0, 0],
-        [1, 0, 1, 0, 0, 0]
+        [1, 0, 1, 0, 0],
+        [1, 0, 1, 0, 0],
+        [1, 0, 1, 0, 0]
       ]
     },
     'width-auto': {
       normal: [
-        [1, 0, 0, 1, 1, 0],
-        [1, 0, 0, 1, 1, 0],
-        [1, 0, 1, 1, 0, 0]
+        [1, 0, 0, 1, 1],
+        [1, 0, 0, 1, 1],
+        [1, 0, 1, 1, 0]
       ],
       'keep-all': [
-        [0, 1, 0, 1, 1, 0],
-        [0, 1, 0, 1, 1, 0],
-        [1, 1, 1, 1, 0, 0]
+        [0, 1, 0, 1, 1],
+        [0, 1, 0, 1, 1],
+        [1, 1, 1, 1, 0]
       ],
       'break-word': [
-        [1, 0, 1, 1, 0, 1],
-        [1, 0, 1, 1, 0, 1],
-        [1, 0, 1, 1, 0, 1]
+        [1, 0, 1, 1, 0],
+        [1, 0, 1, 1, 0],
+        [1, 0, 1, 1, 0]
       ],
       'break-all': [
-        [1, 0, 1, 0, 0, 0],
-        [1, 0, 1, 0, 0, 0],
-        [1, 0, 1, 0, 0, 0]
+        [1, 0, 1, 0, 0],
+        [1, 0, 1, 0, 0],
+        [1, 0, 1, 0, 0]
       ]
     }
   } as const
@@ -157,15 +157,39 @@ const getTextLines = async (
     let startIndex = 0
     let endIndex = baseNum
     let ok: undefined | boolean | null = undefined
-    const siteArr: [number, number, string][] = []
-    const lineBreakStr = `,，.。”！》、：；】〉!:;]>`
+    const siteArr: {
+      startIndex: number
+      endIndex: number
+      lineStr: string
+      isWord: boolean
+      hasCJK: boolean
+    }[] = []
     const hanging_punctuation = /[，。！？；：、）”】」》,.!?;:)\]]/ // 避首标点
-    const trailing_punctuation = /[“（《「(\[]]/ // 避尾标点
+    const trailing_punctuation = /[“（《「(\[]/ // 避尾标点
+    const pushLine = (startIndex: number, endIndex: number, lineStr: string) => {
+      let isWord = false
+      let hasCJK = false
+      if (/^\p{L}$/u.test(lineStr)) {
+        isWord = true
+      }
+      if (reg_CJK.test(lineStr)) {
+        hasCJK = true
+      }
+      siteArr.push({
+        startIndex,
+        endIndex,
+        lineStr,
+        isWord,
+        hasCJK
+      })
+    }
     const isEnd = () => {
       if (endIndex >= len - 1) {
         // 无剩余字符
-        endIndex = len
-        siteArr.push([startIndex, endIndex, str.slice(startIndex, endIndex)])
+        if (startIndex < len) {
+          endIndex = len
+          pushLine(startIndex, endIndex, str.slice(startIndex, endIndex))
+        }
         ok = null
         return true
       } else {
@@ -178,31 +202,113 @@ const getTextLines = async (
       const newStartChart = str.charAt(endIndex + offset)
       const lastStr = str.slice(startIndex, endIndex + offset)
       if (styles['line-break'] !== 'anywhere') {
-        const last_is_cjk = reg_CJK.test(lastEndChart)
-        const new_is_cjk = reg_CJK.test(newStartChart)
         if (trailing_punctuation.test(lastEndChart)) {
-          const trailing_match = new RegExp(trailing_punctuation.source + '+$').exec(lastStr)
+          // eg: xxx《《
+          const trailing_match = new RegExp(`\\b(${trailing_punctuation.source}+)?$`).exec(lastStr)
           if (lastStr.length !== trailing_match![0].length) {
             endIndex -= trailing_match![0].length
           }
         } else if (hanging_punctuation.test(newStartChart)) {
-          const hanging_match = new RegExp(`\\b(\\p{L}+)(${hanging_punctuation.source}+)?$`, 'u').exec(lastStr)
-          if (hanging_match && lastStr.length !== hanging_match[0].length) {
-            endIndex -= hanging_match[0].length
+          //yyy 《《》
+          //》xxx
+          let _lastStr = lastStr
+          const match_1 = new RegExp(`${hanging_punctuation.source}+$`).exec(_lastStr)
+          if (match_1) {
+            _lastStr = _lastStr.slice(0, -match_1[0].length)
           }
-        } else if (reg_word.test(lastEndChart) && reg_word.test(newStartChart) && !last_is_cjk && !new_is_cjk) {
-          const pre_match = new RegExp(`${reg_word.source}$`, 'u').exec(lastStr)
-          const pre_word_arr = pre_match![0].split(reg_CJK)
-          endIndex -= pre_word_arr[pre_word_arr.length - 1].length + 1
-          const whole_match = new RegExp(`^${reg_word.source}`, 'u').exec(str.slice(endIndex))
-          const whole_word = whole_match![0].split(reg_CJK, 1)[0]
-          startIndex !== endIndex && siteArr.push([startIndex, endIndex, str.slice(startIndex, endIndex + offset)])
-          startIndex = endIndex
-          endIndex += whole_word.length
-          offset = 0
+          const match_2 = new RegExp(`${trailing_punctuation.source}+$`).exec(_lastStr)
+          let word_match: RegExpExecArray | null = null
+          if (match_2) {
+            _lastStr = _lastStr.slice(0, -match_2[0].length)
+          } else {
+            word_match = /\p{L}+$/u.exec(_lastStr)
+          }
+          if (_lastStr.length !== lastStr.length || word_match) {
+            endIndex -= lastStr.length - _lastStr.length
+            if (word_match) {
+              endIndex -= styles['word-break'] === 'break-all' ? 1 : word_match[0].length
+            }
+          }
+        } else if (reg_word.test(lastEndChart) && reg_word.test(newStartChart)) {
+          let last_has_cjk = false
+          /* if (/^\p{L}+$/u.test(lastStr)) {
+            if (reg_CJK.test(lastStr)) {
+              last_has_cjk = true
+            } else {
+              for (let i = siteArr.length - 1; i >= 0; i--) {
+                const item = siteArr[i]
+                if (item.isWord) {
+                  last_has_cjk = item.hasCJK
+                  if (last_has_cjk) {
+                    break
+                  }
+                } else {
+                  const item_end_word = /\p{L}+$/u.exec(item.lineStr)
+                  if (item_end_word !== null) {
+                    last_has_cjk = reg_CJK.test(item_end_word[0])
+                  }
+                  break
+                }
+              }
+            }
+          } else {
+            const item_end_word = /\p{L}+$/u.exec(lastStr)
+            if (item_end_word !== null) {
+              last_has_cjk = reg_CJK.test(item_end_word[0])
+            }
+          } */
+          const pre_word = /\p{L}+$/u.exec(str.slice(0, endIndex))![0]
+          last_has_cjk = reg_CJK.test(pre_word)
+          let new_has_cjk = false
+          const next_word = /^\p{L}+/u.exec(str.slice(endIndex + offset))
+          if (next_word) {
+            new_has_cjk = reg_CJK.test(next_word[0])
+          }
+          if (!last_has_cjk && !new_has_cjk) {
+            // 纯non-cjk单词
+            const pre_match_str = /\p{L}+$/u.exec(lastStr)![0]
+            if (breakRule[3]) {
+              endIndex += offset
+              if (pre_match_str.length !== lastStr.length) {
+                endIndex -= pre_match_str.length
+              }
+              pushLine(startIndex, endIndex, str.slice(startIndex, endIndex))
+              startIndex = endIndex
+              if (!breakRule[2]) {
+                const whole_match_str = /^\p{L}+\s*/u.exec(str.slice(startIndex))![0]
+                endIndex = startIndex + whole_match_str.length
+                pushLine(startIndex, endIndex, whole_match_str)
+                startIndex = endIndex
+              }
+              endIndex = startIndex + baseNum
+              ok = undefined
+              return
+            }
+          } else {
+            // 含cjk单词
+            const last_match_str = /\p{L}+$/u.exec(lastStr)![0]
+            if (breakRule[1] || (breakRule[3] && !new RegExp(`^${reg_CJK.source}`).test(pre_word))) {
+              // 长cjk从下一行开始
+              endIndex += offset
+              if (last_match_str.length !== lastStr.length) {
+                endIndex -= last_match_str.length
+              }
+              pushLine(startIndex, endIndex, str.slice(startIndex, endIndex))
+              startIndex = endIndex
+              if (!breakRule[0]) {
+                const whole_match_str = /^\p{L}+\s*/u.exec(str.slice(startIndex))![0]
+                endIndex = startIndex + whole_match_str.length
+                pushLine(startIndex, endIndex, whole_match_str)
+                startIndex = endIndex
+              }
+              endIndex = startIndex + baseNum
+              ok = undefined
+              return
+            }
+          }
         }
       }
-      siteArr.push([startIndex, endIndex, str.slice(startIndex, endIndex + offset)])
+      pushLine(startIndex, endIndex, str.slice(startIndex, endIndex + offset))
       startIndex = endIndex + offset
       if (rule[1] && /\u0020/.test(str.charAt(startIndex))) {
         startIndex += /^\u0020+/.exec(str.slice(startIndex))![0].length
@@ -211,22 +317,6 @@ const getTextLines = async (
       ok = undefined
     }
     while (ok !== null) {
-      if (styles['line-break'] !== 'anywhere' && siteArr.length) {
-        const lastLine = siteArr[siteArr.length - 1]
-        const lastLineStr = lastLine[2]
-        const currentFirstChart = str.charAt(startIndex)
-        if (lineBreakStr.includes(currentFirstChart)) {
-          const lastNoBreakCharIndex = lastLineStr
-            .split('')
-            .reverse()
-            .findIndex(e => !lineBreakStr.includes(e))
-          if (lastNoBreakCharIndex > -1) {
-            startIndex -= lastNoBreakCharIndex + 1
-            lastLine[2] = lastLine[2].slice(0, -lastNoBreakCharIndex - 1)
-            lastLine[1] -= lastNoBreakCharIndex + 1
-          }
-        }
-      }
       const w = computedText.context!.measureText(str.slice(startIndex, endIndex)).width
       if (ok === undefined) {
         // 一轮初始状态
@@ -287,7 +377,18 @@ const getTextLines = async (
     if (e) {
       return getLine(rule[1] ? e.trim() : e)
     } else {
-      return { sites: [[0, 0, '']] as [number, number, string][], content: '' }
+      return {
+        sites: [
+          {
+            startIndex: 0,
+            endIndex: 0,
+            lineStr: '',
+            isWord: false,
+            hasCJK: false
+          }
+        ],
+        content: ''
+      }
     }
   })
   return {
@@ -296,7 +397,7 @@ const getTextLines = async (
     flatLines: res
       .map(e => e.sites)
       .flat()
-      .map(e => e[2])
+      .map(e => e.lineStr)
   }
 }
 

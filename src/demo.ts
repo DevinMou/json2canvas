@@ -109,11 +109,14 @@ const layout: DrawLayout = {
             'font-weight': 500,
             background: '#eee',
             'line-height': 1.4,
-            'line-break': 'anywhere'
+            // 'line-break': 'anywhere',
+            'white-space': 'normal', // normal,nowrap,pre,pre-line
+            'word-break': 'normal', // keep-all,break-all,normal
+            'overflow-wrap': 'anywhere' // anywhere,normal,break-word
           },
           content: `This is a long》 and
           Honorificabilitudinitatibus califragilisticexpialidocious Taumatawhakatangihangakoauauotamateaturipukakapikimaungahoronukupokaiwhenuakitanatahu
-          グレートブリテンおよび北アイルランド連合王国という言葉は本当に長い言葉`
+          abcグレートブリテンdefおよび北アイルランド連合王国という言葉は本当に長い言葉`
         }
       ]
     },

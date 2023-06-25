@@ -157,7 +157,8 @@ const baseInheritMap: BaseInheritMap = {
       const fontSizeAst = commonGetInherit(rect, 'font-size')![0] as LengthParseObj
       return [
         new LengthParseObj({
-          value: fontSizeAst.value * rate
+          value: fontSizeAst.value * rate,
+          unit: fontSizeAst.unit
         })
       ]
     }
@@ -194,6 +195,7 @@ type WindowInfo = {
   drawTexts: (layout: ComputedLayout, ctx: SampleCanvas.RenderContext, parentTop: number, parentLeft: number) => void
   baseInheritMap: BaseInheritMap
   checkInherit: typeof checkInherit
+  wordMixinFirstWithCJK?: boolean // 混合单词（含cjk和non-cjk的单词）首字符为non-cjk长单词新启行时是否按照cjk单词判定
 }
 export const windowInfo: Record<string, any> & WindowInfo = {
   dpr: 1,

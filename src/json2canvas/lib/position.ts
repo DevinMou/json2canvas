@@ -168,7 +168,6 @@ export const getLayoutPosition = (layout: ComputedLayout, moveList?: MoveLayoutI
         }
       } else {
         if (item.styles.position === 'absolute') {
-          console.log(171)
           const newLine = !item.rect.isInline
           const absolutePosition: Record<string, number | undefined> = {
             x: undefined,

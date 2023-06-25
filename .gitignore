@@ -7,4 +7,5 @@ build
 *.yaml
 .eslint*
 .prettierrc.js
+.DS_Store
 settings.json

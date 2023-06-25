@@ -32,7 +32,7 @@ const computedText: {
 } = {}
 
 const reg_CJK = /[\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\u3100-\u312F\u3130-\u318F\uAC00-\uD7AF]/
-const reg_CJK2 = /[\p{Script_Extensions=Han}|\p{Script_Extensions=Kana}]/u
+// const reg_CJK2 = /[\p{Script_Extensions=Han}|\p{Script_Extensions=Kana}]/u
 const reg_word = /\p{L}+/u
 const getTextLines = async (
   content: string,
@@ -110,18 +110,9 @@ const getTextLines = async (
     }
   } as const
   const overflowWrapProp = ['normal', 'break-word', 'anywhere'] as const
-  const breakRuleNames = [
-    'cjk-break',
-    'cjk-long-new',
-    'no-cjk-break',
-    'no-cjk-long-new',
-    'overflow',
-    'cjk-no-cjk-split'
-  ] as const
   const breakRule = (inheritWidth === undefined ? breakRules['width-auto'] : breakRules['width-fixed'])[
     styles['word-break'] || 'normal'
   ][overflowWrapProp.indexOf(styles['overflow-wrap'] || 'normal')]
-  // const breakRuleDist: Record<typeof breakRuleNames[number], boolean> = Object.fromEntries(breakRule.map((e,i) => [breakRuleNames[i], !!e]))
 
   let fontWeight: 'normal' | 'bold' = 'normal'
   if (inheritFont.weight) {
@@ -287,7 +278,10 @@ const getTextLines = async (
           } else {
             // 含cjk单词
             const last_match_str = /\p{L}+$/u.exec(lastStr)![0]
-            if (breakRule[1] || (breakRule[3] && !new RegExp(`^${reg_CJK.source}`).test(pre_word))) {
+            if (
+              breakRule[1] ||
+              (breakRule[3] && !windowInfo.wordMixinFirstWithCJK && !new RegExp(`^${reg_CJK.source}`).test(pre_word))
+            ) {
               // 长cjk从下一行开始
               endIndex += offset
               if (last_match_str.length !== lastStr.length) {

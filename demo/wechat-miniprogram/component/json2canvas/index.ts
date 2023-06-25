@@ -121,11 +121,6 @@ Component({
         })
       })
     },
-    clearCanvas() {
-      this.setData({
-        canvas: []
-      })
-    },
     draw(layout: DrawLayout) {
       const _this = this
       return new Promise<void>(resolve => {
@@ -169,8 +164,8 @@ Component({
             rpx: systemInfo.windowWidth / 750
           },
           dpr: systemInfo.platform === 'android' ? systemInfo.pixelRatio : 1,
-          createCanvas: this.createCanvas.bind(this) as (typeof windowInfo)['createCanvas']
-          // clearCanvas: this.clearCanvas.bind(this)
+          createCanvas: this.createCanvas.bind(this) as (typeof windowInfo)['createCanvas'],
+          wordMixinFirstWithCJK: systemInfo.platform === 'android'
         })
       }
       windowInfo.createCanvas!(false)
